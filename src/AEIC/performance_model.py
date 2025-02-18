@@ -16,6 +16,9 @@ class PerformanceModel:
             print("No config file provided - will not intialize")
             pass
         else:
+            print("Reading configuration file ...")
+            self.read_config()
+
             print("Creating Schedule ... ")
             self.create_schedule()
 
@@ -26,10 +29,17 @@ class PerformanceModel:
             self.read_non_LTO()
 
     def read_LTO(self):
+        '''Reads and stores LTO data'''
         pass
 
     def read_non_LTO(self):
+        '''Reads and stores non LTO data'''
         pass
 
     def create_schedule(self):
+        '''Reads and stores OAG Schedule data'''
+        pass
+
+    def read_config(self):
+        '''Reads and stores config data'''
         pass
