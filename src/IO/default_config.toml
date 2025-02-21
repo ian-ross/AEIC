@@ -1,0 +1,14 @@
+["General Information"]
+ac_name = "B738"
+engine = "CFM56-7B"
+generate_PTF = true # true: Read OPF File and generate PTF 
+                    # false: Read PTF file
+
+reference_schedule = "738_sample_data_1000"
+max_range_nm = 2940.0 # 2940 for CFM56-7B and LEAP-1B, 7800 for GE90-115B
+year = 2019
+
+["File Locations"]
+LTO_location = ""
+PTF_location = ""
+OPF_location = ""
