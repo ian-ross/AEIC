@@ -1,6 +1,7 @@
 import numpy as np
 import toml
 import json
+from src.parsers.PTF_reader import parse_PTF
 class PerformanceModel:
     '''Performance model for an aircraft. Contains
         fuel flow, airspeed, ROC/ROD, LTO emissions,
@@ -31,12 +32,42 @@ class PerformanceModel:
         
         # If OPF data input
         if self.config["performance_model_input"] == "OPF":
-            #self.read_OPF()
+            #opf_data = parse_OPF(self.config["performance_model_input"])
             pass
         # If PTF data input
         elif self.config["performance_model_input"] == "PTF":
-            #self.read_PTF()
-            pass
+            ptf_data = parse_PTF(self.config["performance_model_input_file"])
+            # Now build self.states from ptf_data["phases"] exactly like read_performance_data does
+            phases = ptf_data.pop("phases", {})
+            
+            phase_arrays = []
+            for phase_name, phase_data in phases.items():
+                flight_levels = np.array(phase_data['flight_levels_ft'], dtype=float)
+                rocd_lo       = np.array(phase_data['rocd_lo'],         dtype=float)
+                rocd_hi       = np.array(phase_data['rocd_hi'],         dtype=float)
+                tas           = np.array(phase_data['tas'],             dtype=float)
+                fuel_flow_lo  = np.array(phase_data['fuel_flow_lo'],    dtype=float)
+                fuel_flow_hi  = np.array(phase_data['fuel_flow_hi'],    dtype=float)
+                
+                rocd       = np.column_stack((rocd_lo, rocd_hi))
+                fuel_flow  = np.column_stack((fuel_flow_lo, fuel_flow_hi))
+
+                # Create a structured array for this phase
+                phase_array = np.zeros(len(flight_levels), dtype=self.dtype)
+                phase_array['h']         = flight_levels
+                phase_array['rocd']      = rocd
+                phase_array['airspeed']  = tas
+                phase_array['fuel_rate'] = fuel_flow
+
+                phase_arrays.append(phase_array)
+            
+            # Concatenate them
+            if phase_arrays:
+                self.states = np.concatenate(phase_arrays)
+            
+            # Store the rest of the info in self.model_info
+            self.model_info = {}
+            self.model_info.update(ptf_data)
         # If fuel flow function input
         else:
             self.read_performance_data()
@@ -46,7 +77,7 @@ class PerformanceModel:
         '''Parses input json data of aircraft performance'''
         
         # Read and load JSON data 
-        with open(self.config["performance_model_input"], 'r') as f:
+        with open(self.config["performance_model_input_file"], 'r') as f:
             data = json.load(f)
 
         # Extract the 'phases' dictionary and remove it from 'data'

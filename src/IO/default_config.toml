@@ -5,10 +5,10 @@ engine = "CFM56-7B"
 
 max_range_nm = 2940.0           # 2940 for CFM56-7B and LEAP-1B, 7800 for GE90-115B
 
-performance_model_input = "/Users/aditeyashukla/Dropbox/Mac (2)/Documents/LAE/AEIC/src/IO/default_performance_model.json" 
+performance_model_input = "PTF"
                                 # "OPF" : Input as BADA type OPF file
                                 # "PTF" : Input as BADA type PTF file
-                                # OR Input file location with state variables - fuel_flow = f(h, V, gamma, m_fuel)
+                                # PerformanceModel : JSON file with state variables - fuel_flow = f(h, V, gamma, m_fuel)
 
 ["Schedule"]
 reference_schedule = ""       # File name for existing schedule
@@ -18,5 +18,5 @@ sample_number = 1000            # If sample_schedule: how many flights for the s
 year = 2019                     # Schedule year
 
 ["File Locations"]
-performance_model_input_file = ""
+performance_model_input_file = "/Users/aditeyashukla/Dropbox/Mac (2)/Documents/LAE/AEIC/src/IO/B738__.PTF" 
 LTO_input_file = ""
