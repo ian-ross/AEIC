@@ -1,0 +1,50 @@
+{
+    "aircraft_type": "B738",
+    "max_alt_ft": 41000,
+    "max_payload_kg": 22422,
+  
+    "speeds": {
+      "climb":   { "cas_lo": 250, "cas_hi": 300, "mach": 0.80 },
+      "cruise":  { "cas_lo": 250, "cas_hi": 280, "mach": 0.80 },
+      "descent": { "cas_lo": 250, "cas_hi": 290, "mach": 0.80 }
+    },
+  
+    "mass_levels_kg": {
+      "low": 51434,
+      "high": 81371
+    },
+  
+    "phases": {
+      "climb": {
+        "flight_levels_ft": [0, 10, 20, 30],
+        "tas":    [157, 166, 225, 272],
+        
+        "rocd_lo":   [3837, 3535, 4910, 5303],
+        "rocd_hi":   [3875, 4419, 5379,  5500],    
+  
+        "fuel_flow_lo":  [57.52, 57.49, 57.26, 57.03],
+        "fuel_flow_hi":  [57.51, 57.40, 56.97, 56.90]
+      },
+      "cruise": {
+        "flight_levels_ft": [10, 20, 30, 40],
+        "tas":    [272, 343, 462, 459],
+
+        "rocd_lo":   [0, 0, 0, 0],
+        "rocd_hi":   [0, 0, 0, 0],  
+
+        "fuel_flow_lo":  [41.62, 45.33, 46.97, 45.57],
+        "fuel_flow_hi":  [47.21, 47.63, 52.77, 54.18]
+      },
+      "descent": {
+        "flight_levels_ft": [0, 10, 20, 30],
+        "tas":    [144, 163, 233, 272],
+  
+        "rocd_lo":   [-764, -862, -1235, -1443],
+        "rocd_hi":   [-802, -1217, -1486, -1500],  
+
+        "fuel_flow_lo":  [17.26, 17.25, 17.18, 5.70],
+        "fuel_flow_hi":  [17.25, 17.22, 5.66,  5.70]
+      }
+    }
+  }
+  

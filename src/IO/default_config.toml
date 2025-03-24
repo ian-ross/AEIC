@@ -1,10 +1,14 @@
 ["General Information"]
 ac_name = "B738"
+
 engine = "CFM56-7B"
+
 max_range_nm = 2940.0           # 2940 for CFM56-7B and LEAP-1B, 7800 for GE90-115B
-performance_model_input = true  # "OPF" : Input as BADA type OPF file
+
+performance_model_input = "/Users/aditeyashukla/Dropbox/Mac (2)/Documents/LAE/AEIC/src/IO/default_performance_model.json" 
+                                # "OPF" : Input as BADA type OPF file
                                 # "PTF" : Input as BADA type PTF file
-                                # "PerformanceModel" : Input as file with state variables - fuel_flow = f(h, V, gamma, m_fuel)
+                                # OR Input file location with state variables - fuel_flow = f(h, V, gamma, m_fuel)
 
 ["Schedule"]
 reference_schedule = ""       # File name for existing schedule
