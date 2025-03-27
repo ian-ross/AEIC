@@ -7,11 +7,14 @@ def parse_PTF(file_path):
         "phases": {
           "climb": {
             "flight_levels_ft": [...],
+            "tas": [...],
             "rocd_lo": [...],
             "rocd_hi": [...],
-            "tas": [...],
             "fuel_flow_lo": [...],
-            "fuel_flow_hi": [...]
+            "fuel_flow_hi": [...],
+            "cas_lo": <int>,
+            "cas_hi": <int>,
+            "mach": <float>
           },
           "cruise": { ... },
           "descent": { ... }
@@ -24,7 +27,7 @@ def parse_PTF(file_path):
       }
     """
     
-    # Prepare data structures for phases
+    # Prepare data structures for phases with new keys for speeds
     climb_data = {
         "flight_levels_ft": [],
         "tas": [],
@@ -32,6 +35,9 @@ def parse_PTF(file_path):
         "rocd_hi": [],
         "fuel_flow_lo": [],
         "fuel_flow_hi": [],
+        "cas_lo": None,
+        "cas_hi": None,
+        "mach": None,
     }
     cruise_data = {
         "flight_levels_ft": [],
@@ -40,6 +46,9 @@ def parse_PTF(file_path):
         "rocd_hi": [],
         "fuel_flow_lo": [],
         "fuel_flow_hi": [],
+        "cas_lo": None,
+        "cas_hi": None,
+        "mach": None,
     }
     descent_data = {
         "flight_levels_ft": [],
@@ -48,6 +57,9 @@ def parse_PTF(file_path):
         "rocd_hi": [],
         "fuel_flow_lo": [],
         "fuel_flow_hi": [],
+        "cas_lo": None,
+        "cas_hi": None,
+        "mach": None,
     }
     
     # Prepare storage for top-level info
@@ -61,7 +73,7 @@ def parse_PTF(file_path):
 
     with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
         for line in f:
-            # 1) Parse top-level lines before/after the table for alt/payload/mass:
+            # 1) Parse top-level lines before/after the table for alt/payload/mass and speeds:
             if not capture:
                 # Max altitude
                 match_alt = re.search(r"Max Alt\.\s*\[ft\]:\s*([\d,]+)", line)
@@ -90,6 +102,45 @@ def parse_PTF(file_path):
                     if match:
                         high_mass = int(match.group(1))
 
+                # Parse speeds for each phase if the line starts with climb, cruise, or descent
+                stripped = line.lstrip()
+                if stripped.startswith("climb"):
+                    tokens = stripped.split()
+                    if len(tokens) >= 4:
+                        try:
+                            cas = tokens[2]       # Expecting a format like "250/300"
+                            mach = tokens[3]      # e.g., "0.80"
+                            cas_lo, cas_hi = cas.split("/")
+                            climb_data["cas_lo"] = int(cas_lo)
+                            climb_data["cas_hi"] = int(cas_hi)
+                            climb_data["mach"] = float(mach)
+                        except Exception:
+                            pass
+                elif stripped.startswith("cruise"):
+                    tokens = stripped.split()
+                    if len(tokens) >= 4:
+                        try:
+                            cas = tokens[2]
+                            mach = tokens[3]
+                            cas_lo, cas_hi = cas.split("/")
+                            cruise_data["cas_lo"] = int(cas_lo)
+                            cruise_data["cas_hi"] = int(cas_hi)
+                            cruise_data["mach"] = float(mach)
+                        except Exception:
+                            pass
+                elif stripped.startswith("descent"):
+                    tokens = stripped.split()
+                    if len(tokens) >= 4:
+                        try:
+                            cas = tokens[2]
+                            mach = tokens[3]
+                            cas_lo, cas_hi = cas.split("/")
+                            descent_data["cas_lo"] = int(cas_lo)
+                            descent_data["cas_hi"] = int(cas_hi)
+                            descent_data["mach"] = float(mach)
+                        except Exception:
+                            pass
+
             # 2) Detect the start of the flight-level table
             if "FL |" in line:
                 capture = True
@@ -112,7 +163,6 @@ def parse_PTF(file_path):
                 # ============ CRUISE ============ 
                 cruise_str = parts[1]
                 # Typically we expect [TAS, fuel_low, fuel_nom, fuel_high]
-                # (or sometimes fewer if blank line, so check carefully)
                 c_vals = re.findall(r"\d+\.?\d*", cruise_str)
                 if len(c_vals) >= 4:
                     # TAS
@@ -157,7 +207,7 @@ def parse_PTF(file_path):
                 if c_tas is not None:
                     cruise_data["flight_levels_ft"].append(fl)
                     cruise_data["tas"].append(c_tas)
-                    # Cruise rocd is always 0
+                    # Cruise ROCD is always 0
                     cruise_data["rocd_lo"].append(0.0)
                     cruise_data["rocd_hi"].append(0.0)
                     cruise_data["fuel_flow_lo"].append(c_fuel_lo)
@@ -176,7 +226,7 @@ def parse_PTF(file_path):
                 if d_tas_nom is not None:
                     descent_data["flight_levels_ft"].append(fl)
                     descent_data["tas"].append(d_tas_nom)
-                    # replicate nominal rocd in both lo & hi
+                    # Replicate nominal ROCD in both lo & hi
                     descent_data["rocd_lo"].append(d_rocd_nom)
                     descent_data["rocd_hi"].append(d_rocd_nom)
                     descent_data["fuel_flow_lo"].append(d_fuel_nom)

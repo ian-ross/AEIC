@@ -1,7 +1,11 @@
 import numpy as np
 import toml
 import json
-from src.parsers.PTF_reader import parse_PTF
+from parsers.PTF_reader import parse_PTF
+from parsers.OPF_reader import parse_OPF
+from parsers.LTO_reader import parseLTO
+from BADA.aircraft_parameters import Bada3AircraftParameters
+from BADA.model import Bada3JetEngineModel
 class PerformanceModel:
     '''Performance model for an aircraft. Contains
         fuel flow, airspeed, ROC/ROD, LTO emissions,
@@ -30,10 +34,12 @@ class PerformanceModel:
         '''Takes input data given on aircraft performance
             and creates the state variable array'''
         
+        self.ac_params = Bada3AircraftParameters()
         # If OPF data input
         if self.config["performance_model_input"] == "OPF":
-            #opf_data = parse_OPF(self.config["performance_model_input"])
-            pass
+            opf_params = parse_OPF(self.config["performance_model_input_file"])
+            for key in opf_params:
+                setattr(self.ac_params, key, opf_params[key])
         # If PTF data input
         elif self.config["performance_model_input"] == "PTF":
             ptf_data = parse_PTF(self.config["performance_model_input_file"])
@@ -68,9 +74,30 @@ class PerformanceModel:
             # Store the rest of the info in self.model_info
             self.model_info = {}
             self.model_info.update(ptf_data)
+            ac_params_input = {
+                "cas_cruise_lo": phases['cruise']['cas_lo'],
+                "cas_cruise_hi": phases['cruise']['cas_hi'],
+                "cas_cruise_mach": phases['cruise']['mach'],
+            }
+            for key in ac_params_input:
+                setattr(self.ac_params, key, ac_params_input[key])
         # If fuel flow function input
         else:
             self.read_performance_data()
+            ac_params_input = {
+                "cas_cruise_lo": self.model_info["speeds"]['cruise']['cas_lo'],
+                "cas_cruise_hi": self.model_info["speeds"]['cruise']['cas_hi'],
+                "cas_cruise_mach": self.model_info["speeds"]['cruise']['mach'],
+            }
+            for key in ac_params_input:
+                setattr(self.ac_params, key, ac_params_input[key])
+
+        # Initialize BADA engine model
+        self.engine_model = Bada3JetEngineModel(self.ac_params)
+
+        # Load LTO data
+        self.LTO_data = parseLTO(self.config['LTO_input_file'])
+        
             
 
     def read_performance_data(self):
