@@ -4,28 +4,27 @@ engine = "CFM56-7B"
 year = 2019                     # Required year (YYYY)
 time_frequency = 'Y'            # Y/M/D/H
 
-AC_class = NarrowbodyShortHaul   # 1. NarrowbodyShorthaul
+AC_class = "NarrowbodyShortHaul"   # 1. NarrowbodyShorthaul
                                 # 2. WidebodyLonghaul
                                 # OR ICAO code list: ['736', '737', '738']
 
 max_range_nm = 2940.0           # 2940 for CFM56-7B and LEAP-1B, 7800 for GE90-115B
 
 performance_model_input = "PerformanceModel"
-                                # "OPF" : Input as BADA type OPF file
-                                # "PTF" : Input as BADA type PTF file
-                                # PerformanceModel : JSON file with state variables - fuel_flow = f(h, V, gamma, m_fuel)
+                                # "OPF" : Input as BADA type OPF file (FUNCTIONAL INPUT)
+                                # "PerformanceModel" : JSON file with state variables - fuel_flow = f(h, V, gamma, m_fuel) (TABULAR INPUT)
 
 performance_model_input_file = "./src/IO/default_performance_model.json" 
 
 ["LTO data"]
-LTO_input_mode = "custom" # "custom" : custom LTO data file provided
-                          # "EDB" : EDB datafile provided
+LTO_input_mode = "PerformanceModel" # "PerformanceModel" : LTO data provided in PerformanceModel file
+                          # "input_file" : Additional LTO data provided
 LTO_input_file = "./src/IO/B738__.LTO"
 
 ["Scheduling"]
-schedule_folder = "./src/scheduling/schedule_files/"
+schedule_folder = "scheduling/schedule_files/"
 schedule_in_file = "2019pandas_processed_forAEIC_normal.csv"
-airport file = "all_airports.csv"
+airport_file = "all_airports.csv"
 stop_after_scheduling = true
 reference_schedule = ""         # File name for existing schedule
                                 # Empty string: Use OAG data and max range to get schedule
