@@ -128,3 +128,7 @@ def crosses_dateline(lon1, lon2):
     diff = lon2 - lon1
     cross = (np.abs(diff) > np.pi).astype(int)
     return np.sign(diff) * cross
+
+
+def degrees_to_radians(degrees: FloatOrNDArray) -> FloatOrNDArray:
+    return np.pi * degrees / 180

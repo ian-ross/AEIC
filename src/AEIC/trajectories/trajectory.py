@@ -9,6 +9,7 @@ class Trajectory:
         # Save A/C performance model and the mission to be flown
         # NOTE: Currently assume that `mission` comes in as a dictionary with the format of a single flight
         # in `src/missions/sample_missions_10.json`
+        self.name = f'{mission["dep_airport"]}_{mission["arr_airport"]}_{mission["ac_code"]}'
         self.ac_performance = ac_performance
         self.mission = mission
         
