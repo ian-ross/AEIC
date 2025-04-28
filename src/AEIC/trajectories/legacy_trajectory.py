@@ -20,9 +20,6 @@ class LegacyTrajectory(Trajectory):
     
     def descent(self):
         pass
-    
-    
-    def lto(self):
-        pass
+
     
     

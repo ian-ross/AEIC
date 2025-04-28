@@ -9,12 +9,12 @@ performance_model_input = "PerformanceModel"
                                 # "OPF" : Input as BADA type OPF file
                                 # "PTF" : Input as BADA type PTF file
                                 # PerformanceModel : JSON file with state variables - fuel_flow = f(h, V, gamma, m_fuel)
-performance_model_input_file = "/Users/aditeyashukla/Dropbox/Mac (2)/Documents/LAE/AEIC/src/IO/default_performance_model.json" 
+performance_model_input_file = "./IO/default_performance_model.json" 
 
 ["LTO data"]
 LTO_input_mode = "custom" # "custom" : custom LTO data file provided
                           # "EDB" : EDB datafile provided
-LTO_input_file = "/Users/aditeyashukla/Dropbox/Mac (2)/Documents/LAE/AEIC/src/IO/B738__.LTO"
+LTO_input_file = "./IO/B738__.LTO"
 
 ["Schedule"]
 reference_schedule = ""       # File name for existing schedule
