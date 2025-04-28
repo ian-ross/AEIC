@@ -24,21 +24,12 @@ class Trajectory:
         # Convert gc distance to meters
         self.gc_distance = mission["distance_nm"] # FIXME: check to make sure this is changed to meters
     
+        # Get load factor from mission object
+        self.load_factor = mission["load_factor"]
+    
         # Controls whether or not route optimization is performed
         # NOTE: This currently does nothing
         self.optimize = optimize        
-    
-    
-    def calc_trajectory(self):
-        '''
-        Uses the `climb`, `cruise`, `descent`, and `lto` functions
-        defined by child classes (specific trajectory calculation
-        methods) to determine a flight's trajectory.
-        
-        Outputs:
-        - NDArray containing (time, altitude, lat, lon, fuel flow)
-        '''
-        pass
     
     
     def climb(self):
