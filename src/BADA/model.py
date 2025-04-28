@@ -3,12 +3,12 @@ import numpy as np
 # from scipy.integrate import cumulative_trapezoid
 from abc import ABC, abstractmethod
 
-from utils.helpers import *
-from BADA.fuel_burn_base import BaseFuelBurnModel
-from utils.custom_types import FloatOrNDArray
-from BADA.aircraft_parameters import Bada3AircraftParameters
-from utils.consts import *
-from utils.standard_atmosphere import * 
+from ..utils.helpers import *
+from ..BADA.fuel_burn_base import BaseFuelBurnModel
+from ..utils.custom_types import FloatOrNDArray
+from ..BADA.aircraft_parameters import Bada3AircraftParameters
+from ..utils.consts import *
+from ..utils.standard_atmosphere import * 
 # (
 #     temperature_at_altitude_isa_bada4,
 #     calculate_air_density,

@@ -1,11 +1,11 @@
 import numpy as np
 from typing import Union
-from utils.custom_types import FloatOrNDArray
+from ..utils.custom_types import FloatOrNDArray
 from numpy.typing import NDArray, ArrayLike
-from utils.consts import *#h_p_tropo, beta_tropo, p0, T0, rho0, a0, R_air, g0, kappa
+from ..utils.consts import *#h_p_tropo, beta_tropo, p0, T0, rho0, a0, R_air, g0, kappa
 
 
-def temperature_at_altitude_isa_bada4(altitude: Union[float, NDArray]) -> NDArray:
+def temperature_at_altitude_isa_bada4(altitude: FloatOrNDArray) -> NDArray:
     """Return the temperature at the provided altitude(s).
     Units are SI (m, Kelvin)
 
