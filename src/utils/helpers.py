@@ -132,3 +132,7 @@ def crosses_dateline(lon1, lon2):
 
 def degrees_to_radians(degrees: FloatOrNDArray) -> FloatOrNDArray:
     return np.pi * degrees / 180
+
+
+def nautmiles_to_meters(nautmiles: FloatOrNDArray) -> FloatOrNDArray:
+    return nautmiles * 1852
