@@ -10,6 +10,10 @@ class LegacyTrajectory(Trajectory):
     def __init__(self, ac_performance:PerformanceModel, mission, optimize=False, startingMass=None):
         super().__init__(ac_performance)
         
+        # Make sure the performance model is a BADA PTF file
+        if self.ac_performance.config['performance_model_input'] != 'PTF':
+            raise ValueError('Legacy trajectories (AEIC v2) must use PTF performance inputs')
+        
         # Climb defined as starting 3000' above airport
         self.clm_start_altitude = self.dep_lon_lat_alt[-1] + feet_to_meters(3000.0)
         
