@@ -32,4 +32,18 @@ def plot_flight_arc(mission):
     points = geod.npts(lon_dep, lat_dep, lon_arr, lat_arr, 100)
     lons = [lon_dep] + [pt[0] for pt in points] + [lon_arr]
     lats = [lat_dep] + [pt[1] for pt in points] + [lat_arr]
+
+    ax.plot(lons, lats, 'k-', linewidth=0.8, alpha=0.7)
     
+    # Mark endpoints
+    ax.plot(lon_dep, lat_dep, 'go', markersize=6, label="Departure")
+    ax.plot(lon_arr, lat_arr, 'ro', markersize=6, label="Arrival")
+    
+    # Add legend and title
+    ax.legend(loc='lower left')
+    dep_code = mission['dep_airport']
+    arr_code = mission['arr_airport']
+    ax.set_title(f"Flight Arc: {dep_code} → {arr_code}")
+    
+    plt.tight_layout()
+    plt.savefig("sample.png", dpi=300)
