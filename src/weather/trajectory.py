@@ -1,11 +1,11 @@
 from pyproj import Geod
 import numpy as np
 
-def get_flight_track(mission):
+def get_mission_points(mission):
     
     # Instantiate WGS84 ellipsoid
     geod = Geod(ellps ="WGS84")
-
+    
     # Extract OD lat-lon 
     lon_dep, lat_dep, _ = mission["dep_location"]
     lon_arr, lat_arr, _ = mission["arr_location"]
@@ -18,15 +18,4 @@ def get_flight_track(mission):
     lons = [lon_dep] + [pt[0] for pt in points] + [lon_arr]
     lats = [lat_dep] + [pt[1] for pt in points] + [lat_arr]
     
-    # Initialize track angle array
-    track_angles = []
-    
-    for (lonA, latA), (lonB, latB) in zip(zip(lons[:-1], lats[:-1]), zip(lons[1:], lats[1:])):
-        az, _, _ = geod.inv(lonA, latA, lonB, latB)
-        track_angles.append(az % 360)
-
-    print(track_angles)
-
-    
-    
-
+    print(lons, " ", lats)
