@@ -1,7 +1,9 @@
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
-from cartopy.geodesic import Geodesic
+from pyproj import Geod
+import numpy as np
+
 
 def plot_flight_arc(mission):
     
@@ -19,22 +21,15 @@ def plot_flight_arc(mission):
     ax.add_feature(cfeature.OCEAN, facecolor='lightblue')
     ax.gridlines(draw_labels=True, linewidth=0.5, color='gray', alpha=0.5)
     
-    # Plot flights
-    gd = Geodesic()
-    
+    # Extract OD lat lon position
     lon_dep, lat_dep, _ = mission["dep_location"]
     lon_arr, lat_arr, _ = mission["arr_location"]
     
-    # Draw great circle arc
+    # Use WGS84 ellipse definition
+    geod = Geod(ellps="WGS84")
     
-    arc = gd.inverse([lon_dep, lon_arr], [lat_dep, lat_arr])
-    arc_coords = arc["coordinates"]
-    ax.plot(arc_coords[:, 0], arc_coords[:, 1], 'k-', linewidth=0.7, alpha=0.6)
+    # Get 100 equally spaced points along the arc
+    points = geod.npts(lon_dep, lat_dep, lon_arr, lat_arr, 100)
+    lons = [lon_dep] + [pt[0] for pt in points] + [lon_arr]
+    lats = [lat_dep] + [pt[1] for pt in points] + [lat_arr]
     
-    # Plot dep/arr points
-    ax.plot(lon_dep, lat_dep, 'go', markersize=3)
-    ax.plot(lon_arr, lat_arr, 'ro', markersize=3)
-    
-    plt.tight_layout()
-    plt.savefig("sample.png", dpi = 300)
-    plt.close()
