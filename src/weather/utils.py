@@ -94,6 +94,7 @@ def get_tas(mission_data, era5_path):
     track_angles = []
     headings = []
     drifts = []
+    tas_vals = []
     
     # Loop over all points along the arc
     for i in range(len(lons) - 1):
@@ -114,7 +115,11 @@ def get_tas(mission_data, era5_path):
         vax = vgx - u_vals[i]   # TAS x-component
         vay = vgy - v_vals[i]   # TAS y-component
         
-        tas = np.sqrt(vax**2 + vay**2)
+        tas_mps = np.sqrt(vax**2 + vay**2)
+        tas_knots = tas_mps / 0.514444  # m/s -> knots
+        
+        tas_vals.append(tas_knots)
+        
         heading_rad = np.arctan2(vay, vax)
         heading_deg = np.rad2deg(heading_rad) % 360
         
@@ -129,6 +134,7 @@ def get_tas(mission_data, era5_path):
         np.array(track_angles),
         np.array(headings),
         np.array(drifts),
+        np.array(tas_vals),
         u_vals,
         v_vals,
         wind_speed
