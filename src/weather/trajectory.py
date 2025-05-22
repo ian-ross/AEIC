@@ -1,6 +1,8 @@
 from pyproj import Geod
 import numpy as np
 
+
+
 def get_mission_points(mission):
     
     # Instantiate WGS84 ellipsoid

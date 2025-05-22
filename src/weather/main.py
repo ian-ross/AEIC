@@ -22,6 +22,12 @@ for lon, lat, gs, alt in zip(trajectory["lons"][:5], trajectory["lats"][:5], tra
     print(f"Lon: {lon:.2f}, Lat: {lat:.2f}, GS: {gs} kt, Alt: {alt} ft")
 
 
+#util.get_flight_track(trajectory)
+
+util.get_wind_at_points("ERA5/sample.grib")
+
+
+
 #dr.plot_flight_arc(first_mission)
 
 #util.get_flight_track(first_mission)
