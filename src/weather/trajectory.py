@@ -18,4 +18,17 @@ def get_mission_points(mission):
     lons = [lon_dep] + [pt[0] for pt in points] + [lon_arr]
     lats = [lat_dep] + [pt[1] for pt in points] + [lat_arr]
     
-    print(lons, " ", lats)
+    # Assign a dummy ground speed
+    ground_speeds = [450] * len(lons)
+    
+    # Assign a dummy cruise altitude
+    altitude_ft = [35000] * len(lons)
+    
+    return {
+        "lons": lons,
+        "lats": lats,
+        "GS": ground_speeds,
+        "H": altitude_ft
+    }
+    
+    
