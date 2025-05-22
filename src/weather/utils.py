@@ -78,3 +78,58 @@ def get_wind_at_points(mission_data, era5_path):
     wind_speed = np.sqrt(u_vals**2 + v_vals**2)
     
     return u_vals, v_vals, wind_speed
+
+
+def get_tas(mission_data, era5_path):
+
+    # Get wind components based on path
+    u_vals, v_vals, wind_speed = get_wind_at_points(mission_data, era5_path)
+    
+    # Compute geodesic track angles between consecutive flight segments
+    geod = Geod(ellps="WGS84")
+    lons = mission_data["lons"]
+    lats = mission_data["lats"]
+    gs = mission_data["GS"]
+    
+    track_angles = []
+    headings = []
+    drifts = []
+    
+    # Loop over all points along the arc
+    for i in range(len(lons) - 1):
+        # Compute track angle for the two lat-lon pairs
+        lon1, lat1 = lons[i], lats[i]
+        lon2, lat2 = lons[i + 1], lats[i + 1]
+        az_fwd, _, _ = geod.inv(lon1, lat1, lon2, lat2)
+        track = az_fwd % 360
+        track_angles.append(track)
+        
+    # Use wind triangle to compute heading and drift
+        track_rad = np.deg2rad(track)
+        vgx = gs[i] * np.cos(track_rad)  # ground speed-x along track
+        vgy = gs[i] * np.sin(track_rad)  # ground speed-y along track
+        
+        
+        # Substract wind vector (souce ERA-5 dummy weather)
+        vax = vgx - u_vals[i]   # TAS x-component
+        vay = vgy - v_vals[i]   # TAS y-component
+        
+        tas = np.sqrt(vax**2 + vay**2)
+        heading_rad = np.arctan2(vay, vax)
+        heading_deg = np.rad2deg(heading_rad) % 360
+        
+        # Compute path drift
+        drift = (heading_deg - track + 360) % 360
+        if drift > 180:
+            drift -= 360  # Convert to signed drift
+        headings.append(heading_deg)
+        drifts.append(drift)
+        
+    return (
+        np.array(track_angles),
+        np.array(headings),
+        np.array(drifts),
+        u_vals,
+        v_vals,
+        wind_speed
+    )
