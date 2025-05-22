@@ -24,7 +24,7 @@ for lon, lat, gs, alt in zip(trajectory["lons"][:5], trajectory["lats"][:5], tra
 
 #util.get_flight_track(trajectory)
 
-util.get_wind_at_points("ERA5/sample.grib")
+u, v, windmag = util.get_wind_at_points(trajectory, "ERA5/sample.grib")
 
 
 
