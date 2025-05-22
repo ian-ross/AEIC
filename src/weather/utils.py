@@ -139,3 +139,49 @@ def get_tas(mission_data, era5_path):
         v_vals,
         wind_speed
     )
+    
+
+def apply_drift_to_mission_points(mission_data, drift_angles):
+    """
+    Computes drifted lat/lon positions by adjusting the heading from the track angle.
+
+    Parameters
+    ----------
+    mission_data : dict
+        Output from get_mission_points(), containing 'lons', 'lats'.
+    drift_angles : list or np.ndarray
+        Drift angles in degrees for each segment.
+
+    Returns
+    -------
+    drifted_lons : list
+        Adjusted longitude values after drift.
+    drifted_lats : list
+        Adjusted latitude values after drift.
+    """
+    geod = Geod(ellps="WGS84")
+    lons = mission_data["lons"]
+    lats = mission_data["lats"]
+
+    drifted_lons = [lons[0]]
+    drifted_lats = [lats[0]]
+
+    for i in range(len(drift_angles)):
+        lon1 = drifted_lons[-1]
+        lat1 = drifted_lats[-1]
+        lon2 = lons[i + 1]
+        lat2 = lats[i + 1]
+
+        # Compute track azimuth and distance from original points
+        fwd_azimuth, _, distance_m = geod.inv(lon1, lat1, lon2, lat2)
+
+        # Apply drift to adjust heading
+        drifted_heading = (fwd_azimuth + drift_angles[i]) % 360
+
+        # Project new position using drifted heading and same distance
+        lon_drifted, lat_drifted, _ = geod.fwd(lon1, lat1, drifted_heading, distance_m)
+
+        drifted_lons.append(lon_drifted)
+        drifted_lats.append(lat_drifted)
+
+    return drifted_lons, drifted_lats

@@ -24,7 +24,16 @@ for lon, lat, gs, alt in zip(trajectory["lons"][:5], trajectory["lats"][:5], tra
 
 #util.get_flight_track(trajectory)
 
-u, v, windmag = util.get_wind_at_points(trajectory, "ERA5/sample.grib")
+weather_data = "ERA5/sample.grib"
+
+#u, v, windmag = util.get_wind_at_points(trajectory, "ERA5/sample.grib")
+
+
+track, heading, drift, tas, u, v, wind_mag = util.get_tas(trajectory, "era5.grib")
+
+for i in range(5):
+    print(f"Pt {i}: Track={track[i]:.1f}°, Heading={heading[i]:.1f}°, Drift={drift[i]:+.1f}°, "
+          f"TAS={tas[i]:.1f} kt, U={u[i]:.1f}, V={v[i]:.1f}, Wind={wind_mag[i]:.1f} m/s")
 
 
 
