@@ -79,8 +79,51 @@ def get_wind_at_points(mission_data, era5_path):
     
     return u_vals, v_vals, wind_speed
 
-
 def get_tas(mission_data, era5_path):
+    """
+    Computes the true airspeed (TAS), heading, and drift angle along a flight path using geodesic 
+    track angles and interpolated wind components from ERA5 reanalysis data.
+
+    Parameters
+    ----------
+    mission_data : dict
+        Dictionary containing flight path data with the following keys:
+            - 'lats': array-like, latitudes of flight path points [degrees]
+            - 'lons': array-like, longitudes of flight path points [degrees]
+            - 'GS': array-like, ground speed at each point [knots]
+
+    era5_path : str
+        File path to the ERA5 dataset used for wind interpolation.
+
+    Returns
+    -------
+    track_angles : np.ndarray
+        Array of geodesic track angles (course) between consecutive lat-lon points [degrees].
+
+    headings : np.ndarray
+        Array of aircraft headings (direction of motion through the air) [degrees].
+
+    drifts : np.ndarray
+        Array of drift angles (heading - track), indicating crosswind correction required [degrees].
+
+    tas_vals : np.ndarray
+        Array of computed true airspeeds (TAS) along the path [knots].
+
+    u_vals : np.ndarray
+        Interpolated eastward wind components (u-wind) at each flight point [m/s].
+
+    v_vals : np.ndarray
+        Interpolated northward wind components (v-wind) at each flight point [m/s].
+
+    wind_speed : np.ndarray
+        Magnitude of interpolated wind speed at each point [m/s].
+
+    Notes
+    -----
+    - TAS is computed using the wind triangle from the vector difference between ground speed vector and wind vector.
+    - Drift angle is signed and bounded to the range [-180, 180] degrees.
+    - Requires `pyproj.Geod` and NumPy.
+    """
 
     # Get wind components based on path
     u_vals, v_vals, wind_speed = get_wind_at_points(mission_data, era5_path)
