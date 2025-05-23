@@ -4,6 +4,32 @@ import numpy as np
 
 
 def get_mission_points(mission):
+    """
+    Generates a discretized set of latitude and longitude points along a great-circle path
+    between departure and arrival locations, assuming constant cruise altitude and ground speed.
+
+    Parameters
+    ----------
+    mission : dict
+        Dictionary containing origin and destination coordinates with the following keys:
+            - 'dep_location': tuple of (longitude, latitude, altitude) for the departure point [degrees, degrees, feet]
+            - 'arr_location': tuple of (longitude, latitude, altitude) for the arrival point [degrees, degrees, feet]
+
+    Returns
+    -------
+    dict
+        A dictionary containing:
+            - 'lons' : list of longitudes along the flight path [degrees]
+            - 'lats' : list of latitudes along the flight path [degrees]
+            - 'GS'   : list of assumed constant ground speed at each point [knots]
+            - 'H'    : list of assumed constant cruise altitude at each point [feet]
+
+    Notes
+    -----
+    - The path is discretized using 100 intermediate points (plus endpoints), resulting in 102 total waypoints.
+    - This function uses `pyproj.Geod` with the WGS84 ellipsoid to compute a geodesic path.
+    - All values for speed and altitude are placeholders; replace them with mission-specific data in actual use.
+    """
     
     # Instantiate WGS84 ellipsoid
     geod = Geod(ellps ="WGS84")
