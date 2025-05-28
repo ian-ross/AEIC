@@ -270,7 +270,7 @@ def build_era5_interpolators(era5_path):
 
     return u_interp, v_interp, {"levels": levels, "lats": lats, "lons": lons}
 
-def compute_ground_speed(lon, lat,lon_next, lat_next, alt_ft, tas_knots, u_interp, v_interp):
+def compute_ground_speed(lon, lat, lon_next, lat_next, alt_ft, tas_knots, u_interp, v_interp):
     
     """
     Computes ground speed for a single point using TAS, heading, and interpolated winds.
