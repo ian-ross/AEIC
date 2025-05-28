@@ -19,6 +19,7 @@ class LegacyTrajectory(Trajectory):
         self.NClm = 1 / self.pctStepClm + 1
         self.NCrz = 1 / self.pctStepCrz + 1
         self.NDes = 1 / self.pctStepDes + 1
+        self.Ntot = self.NClm + self.NCrz + self.NDes
         
         # Climb defined as starting 3000' above airport
         self.clm_start_altitude = self.dep_lon_lat_alt[-1] + feet_to_meters(3000.0)
@@ -32,26 +33,35 @@ class LegacyTrajectory(Trajectory):
             self.clm_start_altitude = self.dep_lon_lat_alt[-1]
             
         # Cruise altitude is the operating ceiling - 7000 feet
-        self.crz_altitude = max_alt - feet_to_meters(7000.)
+        self.crz_start_altitude = max_alt - feet_to_meters(7000.)
         
         # Ensure cruise altitude is above the starting altitude
-        if self.crz_altitude < self.clm_start_altitude:
-            self.crz_altitude = self.clm_start_altitude
+        if self.crz_start_altitude < self.clm_start_altitude:
+            self.crz_start_altitude = self.clm_start_altitude
             
         # Prevent flying above A/C ceiling (NOTE: this will only trigger due to random 
         # variables not currently implemented)
-        if self.crz_altitude > max_alt:
-            self.crz_altitude = max_alt
+        if self.crz_start_altitude > max_alt:
+            self.crz_start_altitude = max_alt
+            
+        # In legacy trajectory, descent start altitude is equal to cruise altitude
+        self.des_start_altitude = self.crz_start_altitude
+        
+        # Set descent altitude based on 3000' above arrival airport altitude; clamp to A/C operating
+        # ceiling if needed
+        self.des_end_altitude = self.arr_lon_lat_alt[-1] + feet_to_meters(3000.0)
+        if self.des_end_altitude >= max_alt:
+            self.des_end_altitude = max_alt
         
         # Save relevant flight levels
-        self.crz_FL = meters_to_feet(self.crz_altitude) / 100
+        self.crz_FL = meters_to_feet(self.crz_start_altitude) / 100
         self.clm_FL = meters_to_feet(self.clm_start_altitude) / 100
         
         # Get the relevant bounding flight levels for cruise based on performance data
         self.__calc_crz_FLs()
         
         # Get the indices for 0-ROC performance
-        self.__get_zero_roc_index()
+        self.__get_zero_roc_index()      
         
     
     def climb(self):
@@ -71,7 +81,7 @@ class LegacyTrajectory(Trajectory):
     
     
     def calc_starting_mass(self):
-        '''Calculates the starting mass using AEIC v2 methods'''
+        ''' Calculates the starting mass using AEIC v2 methods. Sets both starting mass and non-reserve/hold/divert fuel mass '''
         # Use the highest value of mass per AEIC v2 method
         mass_ind = [len(self.ac_performance.performance_table_cols[-1])-1]
         crz_mass = np.array(self.ac_performance.performance_table_cols[-1])[mass_ind]
@@ -131,7 +141,7 @@ class LegacyTrajectory(Trajectory):
         reserveMass = fuelMass * 0.05
         
         # Diversion fuel per AEIC v2
-        if approxTime / 60 > 180:
+        if approxTime / 60 > 180: # > 180 minutes
             divertMass = nautmiles_to_meters(200.) / tas * fuelflow
             holdMass = 30 * 60 * tas # 30 min; using cruise ff here
         else:
@@ -143,6 +153,9 @@ class LegacyTrajectory(Trajectory):
         # Limit to MTOM if overweight
         if self.starting_mass > self.ac_performance.performance_table_cols[-1][-1]:
             self.starting_mass = self.ac_performance.performance_table_cols[-1][-1]        
+        
+        # Set fuel mass (for weight residual calculation)
+        self.fuel_mass = fuelMass
         
         
     ###################
@@ -164,4 +177,5 @@ class LegacyTrajectory(Trajectory):
         
         
     def __get_zero_roc_index(self, roc_zero_tol=1e-6):
+        ''' Get the index along the ROC axis of performance where ROC == 0 '''
         self.roc_mask = np.abs(np.array(self.ac_performance.performance_table_cols[2])) < roc_zero_tol
