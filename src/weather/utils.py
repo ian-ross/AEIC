@@ -265,12 +265,12 @@ def build_era5_interpolators(era5_path):
     v_data = ds["v"].values
 
     # Interpolator over (level, lat, lon) (Filling with NaNs for safety)
-    u_interp = RegularGridInterpolator((levels, lats, lons), u_data, bounds_error=False, fill_value=np.nan)
-    v_interp = RegularGridInterpolator((levels, lats, lons), v_data, bounds_error=False, fill_value=np.nan)
+    u_interp = RegularGridInterpolator((levels, lats, lons), u_data, bounds_error=False, fill_value=4.0)
+    v_interp = RegularGridInterpolator((levels, lats, lons), v_data, bounds_error=False, fill_value=4.0)
 
     return u_interp, v_interp, {"levels": levels, "lats": lats, "lons": lons}
 
-def compute_ground_speed(lon, lat, lon_next, lat_next, alt_ft, tas_knots, u_interp, v_interp):
+def compute_ground_speed(lon, lat, lon_next, lat_next, alt_ft, tas_kts, u_interp, v_interp):
     
     """
     Computes ground speed for a single point using TAS, heading, and interpolated winds.
@@ -300,7 +300,7 @@ def compute_ground_speed(lon, lat, lon_next, lat_next, alt_ft, tas_knots, u_inte
     
     # Convert altitude and TAS to S.I units
     pressure_level = float(altitude_to_pressure_hpa(alt_ft))  # hPa
-    tas_ms = tas_knots * 0.514444                       # m/s
+    tas_ms = tas_kts * 0.514444                       # m/s
     
     
     # Compute heading in radians from current to next point
@@ -312,9 +312,13 @@ def compute_ground_speed(lon, lat, lon_next, lat_next, alt_ft, tas_knots, u_inte
     u = u_interp([[pressure_level, lat, lon]])[0]
     v = v_interp([[pressure_level, lat, lon]])[0]
     
+    
+    
     # Airspeed vector in Earth frame
     u_air = tas_ms * np.cos(heading_rad)
     v_air = tas_ms * np.sin(heading_rad)
+    
+
     
     # Ground speed = air vector + wind vector
     u_ground = u_air + u

@@ -64,10 +64,20 @@ for i in range(len(lons)):
     
 # Append to trajectory
 
-trajectory["GS_computed"] = gs_list
+trajectory["GS"] = gs_list
 trajectory["heading_rad"] = heading_list
 trajectory["u_wind"] = u_list
 trajectory["v_wind"] = v_list
+
+
+# Print the first few points
+print("\n")
+print("#--------------------------------SAMPLE TRAJECTORY (SNAPSHOT) -----------------------------#\n")
+for lon, lat, tas, gs, alt in zip(trajectory["lons"][:5], trajectory["lats"][:5], trajectory["TAS"][:5], trajectory["GS"][:5], trajectory["H"][:5]):
+    print(f"Lon: {lon:.2f}, Lat: {lat:.2f}, TAS: {tas:.2f} kt, GS: {gs:.2f} kt, Alt: {alt:.2f} ft")
+print("#------------------------------------------------------------------------------------------#\n")
+
+
 
 #track, heading, drift, tas, u, v, wind_mag = util.get_tas(trajectory, "era5.grib")
 
