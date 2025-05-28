@@ -2,7 +2,7 @@ import json
 import draw as dr
 import utils as util
 import trajectory as traj
-import navigation as nav
+
 
 mission_path = "../missions/sample_missions_10.json"
 weather_data = "ERA5/sample.grib"
@@ -19,19 +19,13 @@ first_mission = missions[0]
 # Get mission points based on mission def
 trajectory = traj.create_dummy_traj(first_mission)
 
-# Print the first few points
-print("\n")
-print("#--------------------------------SAMPLE TRAJECTORY (SNAPSHOT) -----------------------------#\n")
-for lon, lat, tas, alt in zip(trajectory["lons"][:5], trajectory["lats"][:5], trajectory["TAS"][:5], trajectory["H"][:5]):
-    print(f"Lon: {lon:.2f}, Lat: {lat:.2f}, TAS: {tas:.2f} kt, Alt: {alt:.2f} ft")
-print("#------------------------------------------------------------------------------------------#\n")
-
 # Unpack trajectory -->
 lons = trajectory["lons"]
 lats = trajectory["lats"]
 alts = trajectory["H"]
 tas = trajectory["TAS"]
 
+# Initialize lists -->
 gs_list, heading_list, u_list, v_list = [], [], [], []
 
 # Build wind interpolator ->
@@ -62,8 +56,7 @@ for i in range(len(lons)):
     u_list.append(u)
     v_list.append(v)
     
-# Append to trajectory
-
+# Append to trajectory ->
 trajectory["GS"] = gs_list
 trajectory["heading_rad"] = heading_list
 trajectory["u_wind"] = u_list
