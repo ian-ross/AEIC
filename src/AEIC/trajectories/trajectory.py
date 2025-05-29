@@ -62,12 +62,16 @@ class Trajectory:
         traj_dtype = [
             ('fuelFlow',   np.float64, self.Ntot),
             ('acMass',     np.float64, self.Ntot),
+            ('fuelMass',   np.float64, self.Ntot),
             ('groundDist', np.float64, self.Ntot),
             ('altitude',   np.float64, self.Ntot),
+            ('FLs',        np.float64, self.Ntot),
             ('flightTime', np.float64, self.Ntot),
-            # ('latitude',   np.float64, self.Ntot),
-            # ('longitude',  np.float64, self.Ntot),
+            ('latitude',   np.float64, self.Ntot),
+            ('longitude',  np.float64, self.Ntot),
+            ('heading',  np.float64, self.Ntot),
             ('tas',        np.float64, self.Ntot),
+            ('FL_weight',  np.float64, self.Ntot),
         ]
         self.traj_data = np.empty((), dtype=traj_dtype)
         
@@ -117,8 +121,12 @@ class Trajectory:
         # Set initial values
         self.traj_data['flightTime'][0] = 0
         self.traj_data['acMass'][0] = self.starting_mass
+        self.traj_data['fuelMass'][0] = self.fuel_mass
         self.traj_data['groundDist'][0] = 0
         self.traj_data['altitude'][0] = self.clm_start_altitude
+        
+        # Calculate lat, lon, heading of initial point
+        # TODO: Need functions for this 
         
         # Fly the climb, cruise, descent segments in order
         self.climb(**kwargs)
@@ -133,7 +141,6 @@ class Trajectory:
         mass_residual = (self.fuel_mass - fuelBurned) / self.fuel_mass
         
         return mass_residual
-        
         
     
     ############################################################

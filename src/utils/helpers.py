@@ -136,3 +136,10 @@ def degrees_to_radians(degrees: FloatOrNDArray) -> FloatOrNDArray:
 
 def nautmiles_to_meters(nautmiles: FloatOrNDArray) -> FloatOrNDArray:
     return nautmiles * 1852
+
+
+def filter_order_duplicates(seq):
+    ''' Filters duplicate list entries while perserving order '''
+    seen = set()
+    seen_add = seen.add
+    return [x for x in seq if not (x in seen or seen_add(x))]
