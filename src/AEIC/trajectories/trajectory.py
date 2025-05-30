@@ -66,6 +66,7 @@ class Trajectory:
             ('groundDist', np.float64, self.Ntot),
             ('altitude',   np.float64, self.Ntot),
             ('FLs',        np.float64, self.Ntot),
+            ('rocs',        np.float64, self.Ntot),
             ('flightTime', np.float64, self.Ntot),
             ('latitude',   np.float64, self.Ntot),
             ('longitude',  np.float64, self.Ntot),
