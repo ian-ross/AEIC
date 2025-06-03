@@ -134,9 +134,6 @@ class Trajectory:
         self.cruise(**kwargs)
         self.descent(**kwargs)
         
-        # Run LTO
-        self.lto(**kwargs)
-        
         # Calculate weight residual normalized by fuel_mass
         fuelBurned = self.starting_mass - self.traj_data['acMass'][-1]
         mass_residual = (self.fuel_mass - fuelBurned) / self.fuel_mass
@@ -156,10 +153,6 @@ class Trajectory:
     
     
     def descent(self):
-        pass
-    
-    
-    def lto(self):
         pass
     
     

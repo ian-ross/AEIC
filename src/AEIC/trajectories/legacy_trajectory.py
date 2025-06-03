@@ -82,24 +82,49 @@ class LegacyTrajectory(Trajectory):
     
     
     def cruise(self):
-        pass
+        ''' Function called by `fly_flight_iteration()` to simulate cruise '''
+        # Start cruise at end-of-climb position and mass (fuel flow, TAS will be replaced)
+        for field in self.traj_data.dtype.names:
+            self.traj_data[field][self.NClm] = self.traj_data[field][self.NClm-1]
+            
+        # Cruise at constant altitude
+        self.traj_data['altitude'][self.NClm:self.NClm+self.NCrz] = self.crz_start_altitude
+        
+        descent_dist_approx = 18.23 * (self.des_start_altitude - self.des_end_altitude)
+        
+        if descent_dist_approx < 0:
+            raise ValueError('Arrival airport should not be above cruise altitude')
     
+        cruise_start_distance = self.traj_data['groundDist'][self.NClm-1]
+        cruise_dist_approx = nautmiles_to_meters(self.gc_distance) - cruise_start_distance - descent_dist_approx
+        
+        # Cruise is discretized into ground distance steps
+        cruise_end_distance = cruise_start_distance + cruise_dist_approx
+        cruise_distance_values = np.linspace(cruise_start_distance, cruise_end_distance, self.NCrz)
+        self.traj_data['groundDist'][self.NClm:self.NClm+self.NCrz] = cruise_distance_values
+        
+        # Get distance step size
+        dGD = cruise_dist_approx / (self.NCrz - 1)
+        
+        self.__legacy_cruise(dGD)
+        
     
     def descent(self):
+        ''' Function called by `fly_flight_iteration()` to simulate descent '''
+        # Start descent at end-of-cruise position and mass (fuel flow, TAS will be replaced)
+        for field in self.traj_data.dtype.names:
+            self.traj_data[field][self.NClm+self.NCrz] = self.traj_data[field][self.NClm+self.NCrz-1]
+            
         dAlt = (self.des_end_altitude - self.des_start_altitude) / (self.NDes)
         if dAlt > 0:
             raise ValueError('Arrival airport + 3000ft should not be higher than end of cruise point')
         
-        alts = np.linspace(self.clm_start_altitude, self.crz_start_altitude, self.NClm)
+        alts = np.linspace(self.des_start_altitude, self.des_end_altitude, self.NDes)
         startN = self.NClm + self.NCrz
         endN = startN + self.NDes
         self.traj_data['altitude'][startN:endN] = alts
         
         self.__legacy_descent()
-    
-    
-    def lto(self):
-        pass
     
     
     def calc_starting_mass(self):
@@ -111,7 +136,7 @@ class LegacyTrajectory(Trajectory):
         subset_performance = self.ac_performance.performance_table[
             np.ix_(self.crz_FL_inds,                                           # axis 0: flight levels
                    np.arange(self.ac_performance.performance_table.shape[1]),  # axis 1: all TAS's
-                   np.where(self.roc_mask)[0],                                 # axis 2: ROC ≈ 0
+                   np.where(self.zero_roc_mask)[0],                                 # axis 2: ROC ≈ 0
                    mass_ind,                                                   # axis 3: high mass value
           )
         ]
@@ -156,7 +181,7 @@ class LegacyTrajectory(Trajectory):
         payloadMass = self.ac_performance.model_info['General_Information']['max_payload_kg'] * self.load_factor
         
         # Fuel Needed (distance / velocity * fuel flow rate)
-        approxTime = self.gc_distance / tas
+        approxTime = nautmiles_to_meters(self.gc_distance) / tas
         fuelMass = approxTime * fuelflow
         
         # Reserve fuel (assumed 5%)
@@ -240,7 +265,7 @@ class LegacyTrajectory(Trajectory):
         
     def __get_zero_roc_index(self, roc_zero_tol=1e-6):
         ''' Get the index along the ROC axis of performance where ROC == 0 '''
-        self.roc_mask = np.abs(np.array(self.ac_performance.performance_table_cols[2])) < roc_zero_tol
+        self.zero_roc_mask = np.abs(np.array(self.ac_performance.performance_table_cols[2])) < roc_zero_tol
         
         
     def __calc_FL_interp_vals(self, i, alt, roc_perf):
@@ -300,6 +325,32 @@ class LegacyTrajectory(Trajectory):
             roc_interp  = roc_vals[0]  + fl_weighting * (roc_vals[1]  - roc_vals[0])
         
         return tas_interp, ff_interp, roc_interp
+    
+    
+    def __calc_tas_crz(self, i, alt, roc_perf):
+        ''' Computes the TAS that depend only on flight level for cruise '''
+        FL = meters_to_feet(alt) / 100
+        self.traj_data['FLs'][i] = FL
+        
+        # Construct interpolation weightings
+        fl_weighting = (FL - self.crz_FLs[0]) / (self.crz_FLs[1] - self.crz_FLs[0])
+        
+        # The the collapsed indices and values of all non-0 fuel flow and TAS values in the filtered performance data
+        non_zero_ff_inds = np.nonzero(roc_perf)
+
+        non_zero_tas_inds = non_zero_ff_inds[1]
+        non_zero_tas_vals = np.array(self.ac_performance.performance_table_cols[1])[non_zero_tas_inds]
+        
+        # Remove duplicate entries; we should have 2 entries in each corresponding to the two bounding flight levels
+        tas_vals = filter_order_duplicates(non_zero_tas_vals)
+        
+        # Interpolate to get TAS
+        if len(tas_vals) == 1:
+            tas_interp = tas_vals[0]
+        else:
+            tas_interp = tas_vals[0] + fl_weighting * (tas_vals[1] - tas_vals[0])
+        
+        return tas_interp, fl_weighting
         
         
     def __calc_roc_climb(self, i, FL, seg_start_mass, roc_perf, rocs):
@@ -317,10 +368,10 @@ class LegacyTrajectory(Trajectory):
         
         # Filter to bounding values
         pos_roc_reduced_perf = roc_perf[
-            np.ix_( FL_inds,                          # axis 0: flight levels
+            np.ix_( FL_inds,                      # axis 0: flight levels
                     np.arange(roc_perf.shape[1]), # axis 1: all TAS's
-                    np.arange(roc_perf.shape[2]), # axis 2: all positive ROC
-                    mass_inds,                        # axis 3: mass value
+                    np.arange(roc_perf.shape[2]), # axis 2: all zero ROC
+                    mass_inds,                    # axis 3: mass value
             )
         ]
         
@@ -346,6 +397,48 @@ class LegacyTrajectory(Trajectory):
         
         roc = roc_1 + (roc_2 - roc_1) * mass_weight
         return roc
+    
+    
+    def __calc_ff_cruise(self, i, seg_start_mass, crz_perf):
+        ''' Calculates rate of climb (roc) given flight level and mass given a 
+        subset of overall performance data (limited to roc > 0 or roc < 0 in 
+        `roc_perf`)
+        '''        
+        # Get bounding mass values
+        mass_inds = self.__search_mass_ind(seg_start_mass)
+        bounding_mass = np.array(self.ac_performance.performance_table_cols[3])[mass_inds]
+        
+        # Filter to bounding values
+        crz_perf_reduced = crz_perf[
+            np.ix_( np.arange(crz_perf.shape[0]), # axis 0: flight levels
+                    np.arange(crz_perf.shape[1]), # axis 1: all TAS's
+                    np.arange(crz_perf.shape[2]), # axis 2: all zero ROC
+                    mass_inds,                    # axis 3: mass value
+            )
+        ]
+        
+        non_zero_ff_inds = np.nonzero(crz_perf_reduced)
+        ffs = crz_perf_reduced[non_zero_ff_inds]
+        fls = self.crz_FLs[non_zero_ff_inds[0]]
+        masses = bounding_mass[non_zero_ff_inds[3]]
+        
+        # Prepare FF matrix
+        ff_mat = np.full((len(self.crz_FLs), len(bounding_mass)), np.nan)
+        
+        # Fill FF matrix
+        for kk in range(len(ffs)):
+            ii = np.where(self.crz_FLs == fls[kk])[0][0]
+            jj = np.where(bounding_mass == masses[kk])[0][0]
+            ff_mat[ii, jj] = ffs[kk]
+            
+        fl_weight = self.traj_data['FL_weight'][i]
+        mass_weight = (seg_start_mass - bounding_mass[0]) / (bounding_mass[1] - bounding_mass[0])
+            
+        ff_1 = ff_mat[0, 0] + (ff_mat[1,0] - ff_mat[0,0]) * fl_weight
+        ff_2 = ff_mat[0, 1] + (ff_mat[1,1] - ff_mat[0,1]) * fl_weight
+        
+        ff = ff_1 + (ff_2 - ff_1) * mass_weight
+        return ff
         
         
     def __legacy_climb(self):
@@ -394,10 +487,6 @@ class LegacyTrajectory(Trajectory):
             segment_fuel = ff * segment_time
             
             # Get ground speed using weather module
-            # TODO: Need functions for this 
-            self.traj_data['latitude'] = 0
-            self.traj_data['longitude'] = 0
-            self.traj_data['heading'] = 0
             gspd = fwd_tas # temp value set to tas; no wind
             
             # Calculate distance along route travelled
@@ -417,7 +506,54 @@ class LegacyTrajectory(Trajectory):
             self.traj_data['fuelMass'][i+1] = self.traj_data['fuelMass'][i] - segment_fuel
             self.traj_data['acMass'][i+1] = self.traj_data['acMass'][i] - segment_fuel
             self.traj_data['groundDist'][i+1] = self.traj_data['groundDist'][i] + dist
-            self.traj_data['flightTime'][i+1] = self.traj_data['flightTime'][i] + segment_time           
+            self.traj_data['flightTime'][i+1] = self.traj_data['flightTime'][i] + segment_time   
+            
+            # Need functions to calculate this
+            self.traj_data['latitude'][i+1] = 0
+            self.traj_data['longitude'][i+1] = 0
+            self.traj_data['heading'][i+1] = 0
+            
+            
+    def __legacy_cruise(self, dGD):
+        ''' Computes state over cruise segment using AEIC v2 methods based on BADA-3 formulas '''
+        subset_performance = self.ac_performance.performance_table[
+            np.ix_(self.crz_FL_inds,                                           # axis 0: flight levels
+                   np.arange(self.ac_performance.performance_table.shape[1]),  # axis 1: all TAS's
+                   np.where(self.zero_roc_mask)[0],                            # axis 2: ROC ≈ 0
+                   np.arange(self.ac_performance.performance_table.shape[3]),  # axis 3: all mass values
+          )
+        ]
+        
+        # TAS in cruise is only dependent on flight level
+        tas_interp, fl_weight = self.__calc_tas_crz(self.NClm, self.crz_start_altitude, subset_performance)
+        self.traj_data['tas'][self.NClm:self.NClm+self.NCrz] = tas_interp
+        self.traj_data['rocs'][self.NClm:self.NClm+self.NCrz] = 0
+        self.traj_data['FL_weight'][self.NClm:self.NClm+self.NCrz] = fl_weight
+        
+        # Get fuel flow, ground speed, etc. for cruise segments
+        for i in range(self.NClm, self.NClm+self.NCrz-1):
+            # Get ground speed using weather module
+            gspd = self.traj_data['tas'][i] # temp value set to tas; no wind
+            
+            # Calculate time required to fly the segment
+            segment_time = dGD / gspd
+            
+            # Get fuel flow rate based on FL and mass interpolation
+            ff = self.__calc_ff_cruise(i, self.traj_data['acMass'][i], subset_performance)
+            
+            # Calculate fuel burn in [kg] over the segment
+            segment_fuel = ff * segment_time
+            
+            # Set aircraft state values
+            self.traj_data['fuelFlow'][i+1] = ff
+            self.traj_data['fuelMass'][i+1] = self.traj_data['fuelMass'][i] - segment_fuel
+            self.traj_data['acMass'][i+1] = self.traj_data['acMass'][i] - segment_fuel
+            self.traj_data['flightTime'][i+1] = self.traj_data['flightTime'][i] + segment_time   
+            
+            # Need functions to calculate this
+            self.traj_data['latitude'][i+1] = 0
+            self.traj_data['longitude'][i+1] = 0
+            self.traj_data['heading'][i+1] = 0
             
             
     def __legacy_descent(self):
@@ -466,10 +602,6 @@ class LegacyTrajectory(Trajectory):
             segment_fuel = ff * segment_time
             
             # Get ground speed using weather module
-            # TODO: Need functions for this 
-            self.traj_data['latitude'] = 0
-            self.traj_data['longitude'] = 0
-            self.traj_data['heading'] = 0
             gspd = fwd_tas # temp value set to tas; no wind
             
             # Calculate distance along route travelled
@@ -485,8 +617,18 @@ class LegacyTrajectory(Trajectory):
             
             segment_fuel += accel_fuel
             
+            # We cannot gain fuel by decelerating in a conventional fuel A/C
+            if segment_fuel < 0:
+                segment_fuel = 0
+            
             # Update the state vector
             self.traj_data['fuelMass'][i+1] = self.traj_data['fuelMass'][i] - segment_fuel
             self.traj_data['acMass'][i+1] = self.traj_data['acMass'][i] - segment_fuel
             self.traj_data['groundDist'][i+1] = self.traj_data['groundDist'][i] + dist
             self.traj_data['flightTime'][i+1] = self.traj_data['flightTime'][i] + segment_time  
+            
+            # Need functions to calculate this
+            self.traj_data['latitude'][i+1] = 0
+            self.traj_data['longitude'][i+1] = 0
+            self.traj_data['heading'][i+1] = 0
+            
