@@ -1,7 +1,7 @@
 import numpy as np
 from src.AEIC.performance_model import PerformanceModel
 from src.utils.helpers import nautmiles_to_meters
-
+from pyproj import Geod
 class Trajectory:
     '''Model for determining flight trajectories.
     '''
@@ -72,10 +72,11 @@ class Trajectory:
             ('longitude',  np.float64, self.Ntot),
             ('heading',  np.float64, self.Ntot),
             ('tas',        np.float64, self.Ntot),
+            ('groundSpeed', np.float64, self.Ntot),
             ('FL_weight',  np.float64, self.Ntot),
         ]
         self.traj_data = np.empty((), dtype=traj_dtype)
-        
+
         if self.starting_mass < 0:
             self.calc_starting_mass(**kwargs)
         
@@ -127,7 +128,13 @@ class Trajectory:
         self.traj_data['altitude'][0] = self.clm_start_altitude
         
         # Calculate lat, lon, heading of initial point
-        # TODO: Need functions for this 
+        # Get great circle trajectory in lat,lon points 
+        geod = Geod(ellps="WGS84")
+        lon_dep, lat_dep, _ = self.dep_lon_lat_alt
+        lon_arr, lat_arr, _ = self.arr_lon_lat_alt
+        lat_lon_trajectory = geod.npts(lon_dep, lat_dep, lon_arr, lat_arr, self.Ntot)
+        self.traj_data['latitude'] = np.array(lat_lon_trajectory)[:,1]
+        self.traj_data['longitude'] = np.array(lat_lon_trajectory)[:,0]
         
         # Fly the climb, cruise, descent segments in order
         self.climb(**kwargs)
