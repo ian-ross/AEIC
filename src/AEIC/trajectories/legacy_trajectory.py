@@ -2,6 +2,7 @@ import numpy as np
 from src.AEIC.performance_model import PerformanceModel
 from src.AEIC.trajectories.trajectory import Trajectory
 from src.utils.helpers import feet_to_meters, meters_to_feet, nautmiles_to_meters, filter_order_duplicates
+from src.utils.weather_utils import compute_ground_speed
 import pandas as pd
 
 class LegacyTrajectory(Trajectory):
@@ -21,7 +22,7 @@ class LegacyTrajectory(Trajectory):
         self.NCrz = int(1 / self.pctStepCrz + 1)
         self.NDes = int(1 / self.pctStepDes + 1)
         self.Ntot = self.NClm + self.NCrz + self.NDes
-        
+
         self.fuel_LHV = fuel_LHV
         
         # Climb defined as starting 3000' above airport
@@ -405,7 +406,9 @@ class LegacyTrajectory(Trajectory):
         `roc_perf`)
         '''        
         # Get bounding mass values
+
         mass_inds = self.__search_mass_ind(seg_start_mass)
+
         bounding_mass = np.array(self.ac_performance.performance_table_cols[3])[mass_inds]
         
         # Filter to bounding values
@@ -486,11 +489,18 @@ class LegacyTrajectory(Trajectory):
             segment_time = (self.traj_data['altitude'][i+1] - self.traj_data['altitude'][i]) / roc
             segment_fuel = ff * segment_time
             
-            # Get ground speed using weather module
-            gspd = fwd_tas # temp value set to tas; no wind
+            self.traj_data['groundSpeed'][i], self.traj_data['heading'][i], u, v = compute_ground_speed(
+                lon=self.traj_data['latitude'][i],
+                lat=self.traj_data['latitude'][i],
+                lon_next=self.traj_data['latitude'][i+1],
+                lat_next=self.traj_data['latitude'][i+1],
+                alt_ft=FL*100,
+                tas_kts=fwd_tas
+            )
+
             
             # Calculate distance along route travelled
-            dist = gspd * segment_time
+            dist = self.traj_data['groundSpeed'][i] * segment_time
             
             # Account for acceleration/deceleration over the segment using end-of-segment tas
             tas_end = self.traj_data['tas'][i+1]
@@ -507,11 +517,6 @@ class LegacyTrajectory(Trajectory):
             self.traj_data['acMass'][i+1] = self.traj_data['acMass'][i] - segment_fuel
             self.traj_data['groundDist'][i+1] = self.traj_data['groundDist'][i] + dist
             self.traj_data['flightTime'][i+1] = self.traj_data['flightTime'][i] + segment_time   
-            
-            # Need functions to calculate this
-            self.traj_data['latitude'][i+1] = 0
-            self.traj_data['longitude'][i+1] = 0
-            self.traj_data['heading'][i+1] = 0
             
             
     def __legacy_cruise(self, dGD):
@@ -532,11 +537,18 @@ class LegacyTrajectory(Trajectory):
         
         # Get fuel flow, ground speed, etc. for cruise segments
         for i in range(self.NClm, self.NClm+self.NCrz-1):
-            # Get ground speed using weather module
-            gspd = self.traj_data['tas'][i] # temp value set to tas; no wind
-            
+
+            self.traj_data['groundSpeed'][i], self.traj_data['heading'][i], _, _ = compute_ground_speed(
+                lon=self.traj_data['latitude'][i],
+                lat=self.traj_data['latitude'][i],
+                lon_next=self.traj_data['latitude'][i+1],
+                lat_next=self.traj_data['latitude'][i+1],
+                alt_ft=self.crz_FL*100,
+                tas_kts=self.traj_data['tas'][i]
+            )
+
             # Calculate time required to fly the segment
-            segment_time = dGD / gspd
+            segment_time = dGD / self.traj_data['groundSpeed'][i]
             
             # Get fuel flow rate based on FL and mass interpolation
             ff = self.__calc_ff_cruise(i, self.traj_data['acMass'][i], subset_performance)
@@ -548,12 +560,8 @@ class LegacyTrajectory(Trajectory):
             self.traj_data['fuelFlow'][i+1] = ff
             self.traj_data['fuelMass'][i+1] = self.traj_data['fuelMass'][i] - segment_fuel
             self.traj_data['acMass'][i+1] = self.traj_data['acMass'][i] - segment_fuel
+           
             self.traj_data['flightTime'][i+1] = self.traj_data['flightTime'][i] + segment_time   
-            
-            # Need functions to calculate this
-            self.traj_data['latitude'][i+1] = 0
-            self.traj_data['longitude'][i+1] = 0
-            self.traj_data['heading'][i+1] = 0
             
             
     def __legacy_descent(self):
@@ -601,11 +609,17 @@ class LegacyTrajectory(Trajectory):
             segment_time = (self.traj_data['altitude'][i+1] - self.traj_data['altitude'][i]) / roc
             segment_fuel = ff * segment_time
             
-            # Get ground speed using weather module
-            gspd = fwd_tas # temp value set to tas; no wind
+            self.traj_data['groundSpeed'][i], self.traj_data['heading'][i], _, _ = compute_ground_speed(
+                lon=self.traj_data['latitude'][i],
+                lat=self.traj_data['latitude'][i],
+                lon_next=self.traj_data['latitude'][i+1],
+                lat_next=self.traj_data['latitude'][i+1],
+                alt_ft=meters_to_feet(self.traj_data['altitude'][i]),
+                tas_kts=fwd_tas
+            )
             
             # Calculate distance along route travelled
-            dist = gspd * segment_time
+            dist = self.traj_data['groundSpeed'][i] * segment_time
             
             # Account for acceleration/deceleration over the segment using end-of-segment tas
             tas_end = self.traj_data['tas'][i+1]
@@ -626,9 +640,4 @@ class LegacyTrajectory(Trajectory):
             self.traj_data['acMass'][i+1] = self.traj_data['acMass'][i] - segment_fuel
             self.traj_data['groundDist'][i+1] = self.traj_data['groundDist'][i] + dist
             self.traj_data['flightTime'][i+1] = self.traj_data['flightTime'][i] + segment_time  
-            
-            # Need functions to calculate this
-            self.traj_data['latitude'][i+1] = 0
-            self.traj_data['longitude'][i+1] = 0
-            self.traj_data['heading'][i+1] = 0
             
