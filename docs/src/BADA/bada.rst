@@ -8,39 +8,39 @@ that can be used to evaluate or manipulate BADA-3 formatted data.
 Engine and Fuel Burn Models
 ---------------------------
 
-.. autoclass:: src.BADA.model.Bada3EngineModel
+.. autoclass:: BADA.model.Bada3EngineModel
     :members:
 
-.. autoclass:: src.BADA.model.Bada3JetEngineModel
+.. autoclass:: BADA.model.Bada3JetEngineModel
     :members:
 
-.. autoclass:: src.BADA.model.Bada3TurbopropEngineModel
+.. autoclass:: BADA.model.Bada3TurbopropEngineModel
     :members:
 
-.. autoclass:: src.BADA.model.Bada3PistonEngineModel
+.. autoclass:: BADA.model.Bada3PistonEngineModel
     :members:
 
-.. autoclass:: src.BADA.model.Bada3FuelBurnModel
+.. autoclass:: BADA.model.Bada3FuelBurnModel
     :members:
 
 
 Aircraft Parameters
 -------------------
 
-.. autoclass:: src.BADA.aircraft_parameters.Bada3AircraftParameters
+.. autoclass:: BADA.aircraft_parameters.Bada3AircraftParameters
     :members:
 
 Fuel Burn Base Classes
 ----------------------
 
-.. autoclass:: src.BADA.fuel_burn_base.BaseAircraftParameters
+.. autoclass:: BADA.fuel_burn_base.BaseAircraftParameters
     :members:
 
-.. autoclass:: src.BADA.fuel_burn_base.BaseFuelBurnModel
+.. autoclass:: BADA.fuel_burn_base.BaseFuelBurnModel
     :members:
 
 Helper Functions
 ----------------
 
-.. automodule:: src.BADA.helper_functions
+.. automodule:: BADA.helper_functions
     :members:
