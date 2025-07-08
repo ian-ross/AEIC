@@ -18,10 +18,12 @@ license = "MIT"
 requires-python = ">=3.11"
 
 dependencies = [
+    "click",
     "numpy",
     "scipy",
     "pandas",
     "pyproj",
+    "tqdm",
     "xarray"
 ]
 
@@ -37,6 +39,9 @@ dev = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[project.scripts]
+convert-oag-data = "commands.convert_oag_data:run"
 
 [tool.ruff]
 # Use Black-compatible defaults
