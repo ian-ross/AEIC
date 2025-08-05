@@ -56,5 +56,5 @@ jobs:
       run: echo "AEIC_DATA_DIR=$(pwd)/data" >> "$GITHUB_ENV"
 
     - name: Run Pytest
-      run: python -m pytest
+      run: python -m pytest tests/
 
