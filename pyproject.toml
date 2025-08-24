@@ -24,7 +24,8 @@ dependencies = [
     "pandas",
     "pyproj",
     "tqdm",
-    "xarray"
+    "xarray",
+    "httpx>=0.28.1",
 ]
 
 [dependency-groups]

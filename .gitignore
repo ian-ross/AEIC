@@ -186,3 +186,7 @@ cython_debug/
 # SQLite databases (ignore for now).
 *.sqlite
 *.sqlite-journal
+
+# Lazily downloaded data files
+data/airports/*.csv
+!data/airports/airports-patch.csv

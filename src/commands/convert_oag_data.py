@@ -1,3 +1,4 @@
+import logging
 import os
 
 import click
@@ -11,8 +12,13 @@ from parsers.OAG_reader import read_oag_file
 @click.argument('in-file')
 @click.argument('db-file')
 def run(in_file, db_file):
+    if os.environ.get('AEIC_DATA_DIR') is None:
+        raise RuntimeError('AEIC_DATA_DIR environment variable is not set.')
     if os.path.exists(db_file):
         raise RuntimeError(f'Database file {db_file} already exists.')
+
+    logging.basicConfig(level=logging.INFO)
+
     db = OAGDatabase(db_file, write_mode=True)
 
     nlines = -1  # (Skip header line.)
@@ -26,6 +32,9 @@ def run(in_file, db_file):
         n += 1
         if n % 10000 == 0:
             db.conn.commit()
+
+    db.conn.commit()
+    db.index()
 
 
 if __name__ == '__main__':

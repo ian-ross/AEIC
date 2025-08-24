@@ -1,5 +1,8 @@
 import os
 
+import httpx
+from tqdm import tqdm
+
 
 def file_location(path: str) -> str:
     # Try local file first.
@@ -7,10 +10,43 @@ def file_location(path: str) -> str:
         return path
 
     # Try in the data directory.
-    data_dir = os.environ.get('AEIC_DATA_DIR')
-    if data_dir is not None:
-        path = os.path.join(data_dir, path)
-        if os.path.exists(path):
-            return path
+    path = data_file_path(path)
+    if path is not None and os.path.exists(path):
+        return path
 
     raise FileNotFoundError(f"File {path} not found in local or data directory.")
+
+
+def data_file_path(path: str) -> str | None:
+    data_dir = os.environ.get('AEIC_DATA_DIR')
+    if data_dir is None:
+        return None
+
+    return os.path.join(data_dir, path)
+
+
+def ensure_data_directory(dir: str) -> None:
+    data_dir = os.environ.get('AEIC_DATA_DIR')
+    if data_dir is None:
+        return
+
+    os.makedirs(os.path.join(data_dir, dir), exist_ok=True)
+
+
+def download(url: str, dest_path: str) -> None:
+    ensure_data_directory(os.path.dirname(dest_path))
+
+    with httpx.stream("GET", url) as response:
+        total = int(response.headers["Content-Length"])
+
+        with tqdm(
+            total=total, unit_scale=True, unit_divisor=1024, unit="B"
+        ) as progress:
+            num_bytes_downloaded = response.num_bytes_downloaded
+            with open(dest_path, "wb") as download_file:
+                for chunk in response.iter_bytes():
+                    download_file.write(chunk)
+                    progress.update(
+                        response.num_bytes_downloaded - num_bytes_downloaded
+                    )
+                    num_bytes_downloaded = response.num_bytes_downloaded
