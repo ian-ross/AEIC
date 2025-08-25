@@ -55,6 +55,8 @@ class OAGDatabase:
         self.db_path = db_path
         self.write_mode = write_mode
         self.conn = sqlite3.connect(self.db_path)
+        self._airport_cache: dict[str, int] = {}
+        self._country_cache: set[str] = set()
 
         # Foreign key constraints are enabled at the connection level, so this
         # needs to be done every time we connect to the database.
@@ -165,9 +167,13 @@ class OAGDatabase:
         return row[0]
 
     def _get_or_add_airport(self, iata_code: str, cur: sqlite3.Cursor) -> int | None:
+        if iata_code in self._airport_cache:
+            return self._airport_cache[iata_code]
+
         cur.execute('SELECT id FROM airports WHERE iata_code = ?', (iata_code,))
         row = cur.fetchone()
         if row:
+            self._airport_cache[iata_code] = row[0]
             return row[0]
 
         airport = airports.airports[iata_code]
@@ -193,9 +199,7 @@ class OAGDatabase:
                 airport.elevation,
             ),
         )
-        row = cur.fetchone()
-        assert row is not None
-        airport_id = row[0]
+        airport_id = cur.fetchone()[0]
 
         # Add to R-Tree index.
         cur.execute(
@@ -212,12 +216,17 @@ class OAGDatabase:
             ),
         )
 
+        self._airport_cache[iata_code] = airport_id
         return airport_id
 
     def _get_or_add_country(self, code: str, cur: sqlite3.Cursor) -> str:
+        if code in self._country_cache:
+            return code
+
         cur.execute('SELECT code FROM countries WHERE code = ?', (code,))
         row = cur.fetchone()
         if row:
+            self._country_cache.add(code)
             return row[0]
 
         country = airports.countries[code]
@@ -229,6 +238,7 @@ class OAGDatabase:
                VALUES (?, ?, ?)""",
             (country.code, country.name, country.continent),
         )
+        self._country_cache.add(country.code)
         return country.code
 
     @staticmethod
@@ -274,7 +284,8 @@ class OAGDatabase:
             seat_capacity INT NOT NULL,
             effective_from TEXT NOT NULL,
             effective_to TEXT NOT NULL,
-            number_of_flights INT NOT NULL
+            number_of_flights INTEGER NOT NULL,
+            od_pair TEXT NOT NULL
           )""")
 
         cur.execute("""
