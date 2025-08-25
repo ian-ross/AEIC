@@ -2,9 +2,8 @@ import logging
 import os
 import sqlite3
 from collections.abc import Generator
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from datetime import datetime, timedelta
-from enum import Enum
 
 import pandas as pd
 
@@ -16,32 +15,117 @@ from utils.units import STATUTE_MILES_TO_KM
 logger = logging.getLogger(__name__)
 
 
-class Comparison(str, Enum):
-    EQUAL = '=='
-    NOT_EQUAL = '!='
-    GREATER_THAN = '>'
-    LESS_THAN = '<'
-    GREATER_OR_EQUAL = '>='
-    LESS_OR_EQUAL = '<='
-
-    @property
-    def sql(self):
-        if self == Comparison.EQUAL:
-            return '='
-        elif self == Comparison.NOT_EQUAL:
-            return '<>'
-        else:
-            return self.value
+@dataclass
+class BoundingBox:
+    min_latitude: float
+    max_latitude: float
+    min_longitude: float
+    max_longitude: float
 
 
 @dataclass
-class Condition:
-    field: str
-    value: str
-    comp: Comparison
+class OAGFilter:
+    min_distance: float | None = None
+    max_distance: float | None = None
+    min_seat_capacity: int | None = None
+    max_seat_capacity: int | None = None
+    country: str | list[str] | None = None
+    continent: str | list[str] | None = None
+    bounding_box: BoundingBox | None = None
+    aircraft_type: str | list[str] | None = None
 
-    def __str__(self):
-        return f'{self.field}{self.comp.value}{self.value}'
+    def normalize(self):
+        if isinstance(self.country, str):
+            self.country = [self.country]
+        if isinstance(self.continent, str):
+            self.continent = [self.continent]
+        if isinstance(self.aircraft_type, str):
+            self.aircraft_type = [self.aircraft_type]
+        spatial = (
+            (1 if self.country is not None and len(self.country) > 0 else 0) +
+            (1 if self.continent is not None and len(self.continent) > 0 else 0) +
+            (1 if self.bounding_box is not None else 0)
+        )
+        if spatial > 1:
+            raise ValueError(
+                'Only one of country, continent, or '
+                'bounding_box can be set in OAGFilter'
+            )
+
+    def _country_condition(self) -> tuple[str, list[str]]:
+        placeholders = ', '.join('?' * len(self.country))
+        sub_select = (
+            '(SELECT id FROM airports '
+            f'WHERE country IN ({placeholders}))'
+        )
+        cond = f'(origin IN {sub_select} OR destination IN {sub_select})'
+        params = self.country + self.country
+        return cond, params
+
+    def _continent_condition(self) -> tuple[str, list[str]]:
+        placeholders = ', '.join('?' * len(self.continent))
+        sub_select = (
+            '(SELECT id FROM airports WHERE country IN '
+            f'(SELECT code FROM countries WHERE continent IN ({placeholders})))'
+        )
+        cond = f'(origin IN {sub_select} OR destination IN {sub_select})'
+        params = self.continent + self.continent
+        return cond, params
+
+    def _bounding_box_condition(self) -> tuple[str, list[float]]:
+        sub_select = (
+            '(SELECT id FROM airport_location_idx '
+            'WHERE min_latitude >= ? AND max_latitude <= ? '
+            'AND min_longitude >= ? AND max_longitude <= ?)'
+        )
+        cond = f'(origin IN {sub_select} OR destination IN {sub_select})'
+        params = [
+            self.bounding_box.min_latitude,
+            self.bounding_box.max_latitude,
+            self.bounding_box.min_longitude,
+            self.bounding_box.max_longitude,
+            self.bounding_box.min_latitude,
+            self.bounding_box.max_latitude,
+            self.bounding_box.min_longitude,
+            self.bounding_box.max_longitude,
+        ]
+        return cond, params
+
+    def to_sql(self) -> tuple[str, list]:
+        self.normalize()
+        conditions = []
+        parameters = []
+
+        def simple(expr, value):
+            if value is not None:
+                conditions.append(expr)
+                parameters.append(value)
+        simple('distance >= ?', self.min_distance)
+        simple('distance <= ?', self.max_distance)
+        simple('seat_capacity >= ?', self.min_seat_capacity)
+        simple('seat_capacity <= ?', self.max_seat_capacity)
+
+        if self.country is not None and len(self.country) > 0:
+            cond, params = self._country_condition()
+            conditions.append(cond)
+            parameters += params
+
+        if self.continent is not None and len(self.continent) > 0:
+            cond, params = self._continent_condition()
+            conditions.append(cond)
+            parameters += params
+
+        if self.bounding_box is not None:
+            cond, params = self._bounding_box_condition()
+            conditions.append(cond)
+            parameters += params
+
+        if self.aircraft_type is not None and len(self.aircraft_type) > 0:
+            placeholders = ', '.join('?' * len(self.aircraft_type))
+            conditions.append(f'aircraft_type IN ({placeholders})')
+            parameters += self.aircraft_type
+
+        return conditions, parameters
 
 
 class OAGDatabase:
@@ -65,10 +149,6 @@ class OAGDatabase:
         if self.write_mode:
             self._ensure_schema(indexes=False)
 
-    def index(self):
-        if self.write_mode:
-            self._ensure_schema(indexes=True)
-
     def cursor(self):
         assert self.conn is not None, 'DB connection is not open'
         return self.conn.cursor()
@@ -76,7 +156,7 @@ class OAGDatabase:
     def add(self, e: OAGEntry, commit: bool = True):
         if not self.write_mode:
             raise RuntimeError("Database is not in write mode")
-        cur = self.conn.cursor()
+        cur = self.cursor()
 
         # Add airport entries if they don't already exist. (Also adds country
         # entries as needed.)
@@ -104,7 +184,7 @@ class OAGDatabase:
             self.conn.commit()
 
     def _add_schedule(self, e: OAGEntry, flight_id: int, cur: sqlite3.Cursor) -> int:
-        num_flights = 0
+        data = []
         for d in pd.date_range(e.efffrom, e.effto):
             if DayOfWeek.from_pandas(d) not in e.days:
                 continue
@@ -122,27 +202,28 @@ class OAGDatabase:
                 # Arrival is on the next day.
                 arrival_timestamp += 24 * 3600
             day = (d - datetime(1970, 1, 1)).days
+            data.append((departure_timestamp, arrival_timestamp, day, flight_id))
 
-            cur.execute(
+        if len(data) > 0:
+            cur.executemany(
                 """INSERT INTO schedules (
                     departure_timestamp, arrival_timestamp, day, flight_id
                 ) VALUES (?, ?, ?, ?)""",
-                (departure_timestamp, arrival_timestamp, day, flight_id),
+                data
             )
-            num_flights += 1
-        return num_flights
+        return len(data)
 
     def _add_flight(
         self, e: OAGEntry, origin_id: int, destination_id: int, cur: sqlite3.Cursor
     ) -> int:
-        placeholders = '?, ' * 13 + '?'
+        placeholders = '?, ' * 14 + '?'
         cur.execute(
             f"""
             INSERT INTO flights (
                 carrier, flight_number, origin, destination,
                 day_of_week_mask, departure_time, arrival_time,
                 aircraft_type, engine_type, distance, seat_capacity,
-                effective_from, effective_to, number_of_flights
+                effective_from, effective_to, number_of_flights, od_pair
             ) VALUES ({placeholders})
             RETURNING id""",
             (
@@ -160,6 +241,7 @@ class OAGDatabase:
                 e.efffrom.isoformat(),
                 e.effto.isoformat(),
                 0,  # Number of flights to be computed from schedule.
+                min(e.depapt, e.arrapt) + max(e.depapt, e.arrapt)
             ),
         )
         row = cur.fetchone()
@@ -245,23 +327,23 @@ class OAGDatabase:
     def _make_dow_mask(days: set[DayOfWeek]) -> int:
         return sum(1 << (day.value - 1) for day in days)
 
-    def __call__(self, *conds: Condition) -> Generator[OAGEntry, None, None]:
-        conditions = []
-        parameters = []
-        valid_fields = set(f.name for f in fields(OAGEntry))
-        for c in conds:
-            if c.field not in valid_fields:
-                raise ValueError(f'Invalid field: {c.field}')
-            conditions.append(f'{c.field} {c.comp.sql} ?')
-            parameters.append(c.value)
+    # def __call__(self, *conds: Condition) -> Generator[OAGEntry, None, None]:
+    #     conditions = []
+    #     parameters = []
+    #     valid_fields = set(f.name for f in fields(OAGEntry))
+    #     for c in conds:
+    #         if c.field not in valid_fields:
+    #             raise ValueError(f'Invalid field: {c.field}')
+    #         conditions.append(f'{c.field} {c.comp.sql} ?')
+    #         parameters.append(c.value)
 
-        sql = 'SELECT * FROM entries'
-        if len(conditions) > 0:
-            sql += ' WHERE ' + ' AND '.join(conditions)
+    #     sql = 'SELECT * FROM entries'
+    #     if len(conditions) > 0:
+    #         sql += ' WHERE ' + ' AND '.join(conditions)
 
-        cur = self.conn.cursor()
-        for row in cur.execute(sql, parameters):
-            yield OAGEntry.from_db_row(row)
+    #     cur = self.cursor()
+    #     for row in cur.execute(sql, parameters):
+    #         yield OAGEntry.from_db_row(row)
 
     def _ensure_schema(self, indexes: bool = True):
         cur = self.conn.cursor()
@@ -275,13 +357,13 @@ class OAGDatabase:
             flight_number TEXT NOT NULL,
             origin INTEGER NOT NULL REFERENCES airports(id),
             destination INTEGER NOT NULL REFERENCES airports(id),
-            day_of_week_mask INT NOT NULL,
+            day_of_week_mask INTEGER NOT NULL,
             departure_time INTEGER NOT NULL,
             arrival_time INTEGER NOT NULL,
             aircraft_type TEXT NOT NULL,
             engine_type TEXT,
             distance REAL NOT NULL,
-            seat_capacity INT NOT NULL,
+            seat_capacity INTEGER NOT NULL,
             effective_from TEXT NOT NULL,
             effective_to TEXT NOT NULL,
             number_of_flights INTEGER NOT NULL,
@@ -323,10 +405,14 @@ class OAGDatabase:
             continent TEXT NOT NULL
           )""")
 
-        if not indexes:
-            return
+        if indexes:
+            self.index()
 
-        logger.info('Creating OAG database indexes')
+    def index(self):
+        logger.info('Vacuuming database')
+
+        cur = self.cursor()
+        cur.execute('VACUUM')
 
         index_data = [
             ('flights', 'carrier', False),
@@ -335,12 +421,18 @@ class OAGDatabase:
             ('flights', 'aircraft_type', False),
             ('flights', 'distance', False),
             ('flights', 'seat_capacity', False),
+            ('flights', 'od_pair', False),
             ('schedules', 'departure_timestamp', False),
             ('schedules', 'flight_id', False),
             ('airports', 'iata_code', True),
             ('airports', 'country', False),
         ]
         for table, column, unique in index_data:
+            logger.info('Creating index on %s.%s', table, column)
             cur.execute(f"""
               CREATE {'UNIQUE' if unique else ''} INDEX IF NOT EXISTS
                   {table}_{column}_idx ON {table}({column})""")
+
+        logger.info('Analyzing database')
+        cur.execute('ANALYZE')
+
