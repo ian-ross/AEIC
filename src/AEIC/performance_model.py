@@ -6,10 +6,11 @@ import numpy as np
 
 from BADA.aircraft_parameters import Bada3AircraftParameters
 from BADA.model import Bada3JetEngineModel
-from parsers.LTO_reader import parseLTO
-from parsers.OPF_reader import parse_OPF
 
 # from src.missions.OAG_filter import filter_OAG_schedule
+from missions import Mission
+from parsers.LTO_reader import parseLTO
+from parsers.OPF_reader import parse_OPF
 from utils import file_location
 
 
@@ -37,8 +38,7 @@ class PerformanceModel:
             )
         )
         with open(mission_file, 'rb') as f:
-            all_missions = tomllib.load(f)
-            self.missions = all_missions['flight']
+            self.missions = Mission.from_toml(tomllib.load(f))
         # self.schedule = filter_OAG_schedule()
 
         # Process input performance data
