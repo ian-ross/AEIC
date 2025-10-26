@@ -222,3 +222,49 @@ class PerformanceModel:
         gc.collect()
 
         return match
+
+    def search_mass_ind(self, mass: float) -> list[int]:
+        """Searches the valid mass values in the performance model for the indices
+        bounding a known mass value.
+
+        Args:
+            mass (float): Mass value of interest.
+
+        Returns:
+            (list[int]) List containing the indices of the TAS values in performance
+                data that bound the given TAS.
+        """
+
+        mass_ind_high = np.searchsorted(self.performance_table_cols[-1], mass)
+
+        if mass_ind_high == 0:
+            raise ValueError('Aircraft is trying to fly below minimum mass')
+        if mass_ind_high == len(self.performance_table_cols[0]):
+            raise ValueError('Aircraft is trying to fly above maximum mass')
+
+        return [int(mass_ind_high - 1), int(mass_ind_high)]
+
+    def search_flight_levels_ind(self, FL: float) -> list[int]:
+        """Searches the valid flight levels in the performance model for the indices
+        bounding a known FL value.
+
+        Args:
+            FL (float): Flight level of interest.
+
+        Returns:
+            (list[int]) List containing the indices of the FLs in the performance data
+                that bound the given FL.
+        """
+
+        FL_ind_high = np.searchsorted(self.performance_table_cols[0], FL)
+
+        if FL_ind_high == 0:
+            raise ValueError(
+                f"Aircraft is trying to fly below minimum cruise altitude(FL {FL:.2f})"
+            )
+        if FL_ind_high == len(self.performance_table_cols[0]):
+            raise ValueError(
+                f"Aircraft is trying to fly above maximum cruise altitude(FL {FL:.2f})"
+            )
+
+        return [int(FL_ind_high - 1), int(FL_ind_high)]
