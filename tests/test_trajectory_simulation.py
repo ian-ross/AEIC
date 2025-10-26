@@ -1,14 +1,13 @@
+import AEIC.trajectories.builders as tb
 from AEIC.performance_model import PerformanceModel
 from AEIC.trajectories import TrajectorySet
-from AEIC.trajectories.builders import Options
-from AEIC.trajectories.builders.legacy import LegacyBuilder
 from utils import file_location
 
 
 def test_trajectory_simulation_1():
     performance_model_file = file_location("IO/default_config.toml")
     perf = PerformanceModel(performance_model_file)
-    builder = LegacyBuilder(options=Options(iterate_mass=False))
+    builder = tb.LegacyBuilder(options=tb.Options(iterate_mass=False))
     ts = TrajectorySet()
 
     for mis in perf.missions:

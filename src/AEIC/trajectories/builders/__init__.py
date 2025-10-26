@@ -81,8 +81,8 @@ class Context:
 
 
 class Builder(ABC):
-    """Parent class for all AEIC trajectory builders. Contains overall `fly`
-     logic.
+    """Abstract parent class for all AEIC trajectory builders. Contains overall
+     `fly` logic.
 
     Attributes:
         options (Options): Options for trajectory building.
@@ -95,6 +95,8 @@ class Builder(ABC):
     Context class."""
 
     def __init__(self, options: Options = Options()) -> None:
+        """Initialize trajectory builder with common options."""
+
         # Check that the context class has been defined properly in the
         # concrete derived class that we're trying to instantiate.
         if self.CONTEXT_CLASS is None:
@@ -105,17 +107,20 @@ class Builder(ABC):
         self.options = options
 
     def __getattr__(self, name: str):
-        # Allow access to context attributes directly from builder. During
-        # trajectory simulation, we create a context object (self.ctx), which
-        # is of a class derived from the base Context class. This object
-        # carries all of the transient information we need to keep track of
-        # during trajectory simulation. To avoid having to write `self.ctx`
-        # everywhere we want to access this information, we redirect attribute
-        # accesses to retrieve context information as required.
-        #
-        # We do *not* redirect `__setattr__` in the same way: setting of
-        # attributes has to be done explicitly, whether that's on the builder
-        # object itself (though that shouldn't happen) or the context.
+        """Custom attribute getter to allow access to context attributes.
+
+        Allow access to context attributes directly from builder. During
+        trajectory simulation, we create a context object (self.ctx), which is
+        of a class derived from the base Context class. This object carries all
+        of the transient information we need to keep track of during trajectory
+        simulation. To avoid having to write `self.ctx` everywhere we want to
+        access this information, we redirect attribute accesses to retrieve
+        context information as required.
+
+        We do *not* redirect `__setattr__` in the same way: setting of
+        attributes has to be done explicitly, whether that's on the builder
+        object itself (though that shouldn't happen) or the context.
+        """
         if hasattr(self, 'ctx') and self.ctx is not None:
             if hasattr(self.ctx, name):
                 return getattr(self.ctx, name)
@@ -126,6 +131,8 @@ class Builder(ABC):
     @property
     def Ntot(self) -> int:
         """Total number of trajectory points."""
+
+        # Note that NClm, NCrz and NDes are defined in the context object!
         return self.NClm + self.NCrz + self.NDes
 
     def fly(
@@ -149,9 +156,7 @@ class Builder(ABC):
                 default to calculate starting mass during simulation.
 
         Returns:
-            result (Result): Result containint trajectory object and other
-                simulation outputs.
-
+            trajectory (Trajectory): Trajectory object.
         """
 
         # This is a wrapper method to ensure that the simulation context gets
@@ -210,7 +215,7 @@ class Builder(ABC):
             del self.ctx
 
     def _fly(self, traj: Trajectory, **kwargs) -> None:
-        # Trajectory optimization
+        # Trajectory optimization.
         if self.options.optimize_traj:
             # Will be implemented in a future version.
             pass
@@ -222,12 +227,13 @@ class Builder(ABC):
             for _ in range(self.options.max_mass_iters):
                 mass_res = self._fly_iteration(traj, **kwargs)
 
-                # Keep the calculated trajectory if the mass is sufficiently small
+                # Keep the calculated trajectory if the mass is sufficiently
+                # small.
                 if abs(mass_res) < self.options.mass_iter_reltol:
                     mass_converged = True
                     break
 
-                # Perform a "dumb" correction of the starting mass
+                # Perform a "dumb" correction of the starting mass.
                 self.starting_mass = self.starting_mass - (mass_res * self.fuel_mass)
 
             if not mass_converged:
@@ -240,31 +246,30 @@ class Builder(ABC):
             self._fly_iteration(traj, **kwargs)
 
     def _fly_iteration(self, traj: Trajectory, **kwargs):
-        """Function for running a single flight iteration. In
-        non-weight-iterating mode, only runs once. `kwargs` used to pass in
-        relevent optimization variables in applicable cases.
+        """Run a single flight iteration. In non-weight-iterating mode, only
+        runs once. `kwargs` used to pass in relevent optimization variables in
+        applicable cases.
 
         Args:
             kwargs: Additional parameters needed by the specific type of
                 trajectory builder being used.
 
         Returns:
-            (float) Difference in fuel burned and calculated required fuel mass.
-
+            (float) Difference in fuel burned and calculated required fuel
+                mass.
         """
 
         self.current_mass = self.starting_mass
 
-        # Set initial values
+        # Set initial values.
         traj.flightTime[0] = 0
         traj.acMass[0] = self.starting_mass
         traj.fuelMass[0] = self.fuel_mass
         traj.groundDist[0] = 0
         traj.altitude[0] = self.clm_start_altitude
 
-        # Calculate lat, lon, heading of initial point
-        # Get great circle trajectory in lat,lon points
-
+        # Calculate lat, lon, heading of initial point.
+        # Get great circle trajectory in lat,lon points.
         # lat_lon_trajectory = self.GEOD.npts(
         #                   self.mission.dep_location.longitude,
         #                   self.mission.dep_location.latitude,
@@ -280,20 +285,16 @@ class Builder(ABC):
             self.mission.arr_location.latitude,
         )
 
-        # Fly the climb, cruise, descent segments in order
+        # Fly the climb, cruise, descent segments in order.
         self.climb(traj, **kwargs)
         self.cruise(traj, **kwargs)
         self.descent(traj, **kwargs)
 
-        # Calculate weight residual normalized by fuel_mass
+        # Calculate weight residual normalized by fuel_mass.
         fuelBurned = self.starting_mass - traj.acMass[-1]
         mass_residual = (self.fuel_mass - fuelBurned) / self.fuel_mass
 
         return mass_residual
-
-    ######################################
-    # TRAJECTORY BUILDER-SPECIFIC METHODS
-    ######################################
 
     @abstractmethod
     def climb(self, traj: Trajectory, **kwargs) -> None:
@@ -316,6 +317,7 @@ class Builder(ABC):
         ...
 
 
-#     Attributes:
-#         starting_mass (float): Starting mass of the aircraft.
-#     """
+from .legacy import LegacyBuilder, LegacyOptions  # noqa
+from .tasopt import TASOPTBuilder, TASOPTOptions  # noqa
+from .ads_b import ADSBBuilder, ADSBOptions  # noqa
+from .dymos import DymosBuilder, DymosOptions  # noqa

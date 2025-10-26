@@ -15,6 +15,8 @@ from . import Builder, Context, Options
 
 @dataclass
 class LegacyOptions:
+    """Additional options for the legacy trajectory builder."""
+
     pctStepClm: float = 0.01
     """Climb step size as percentage of total climb altitude change."""
 
@@ -30,6 +32,8 @@ class LegacyOptions:
 
 
 class LegacyContext(Context):
+    """Context for legacy trajectory builder."""
+
     def __init__(
         self,
         builder: 'LegacyBuilder',
@@ -37,48 +41,51 @@ class LegacyContext(Context):
         mission: Mission,
         starting_mass: float,
     ):
+        # The context constructor calculates all of the fixed information used
+        # throughout the simulation by the trajectory builder.
+
+        # Number of points in different flight phases.
         NClm = int(1 / builder.pctStepClm + 1)
         NCrz = int(1 / builder.pctStepCrz + 1)
         NDes = int(1 / builder.pctStepDes + 1)
 
-        # Climb defined as starting 3000' above airport
+        # Climb defined as starting 3000' above airport.
         clm_start_altitude = mission.dep_location.altitude + 3000.0 * FEET_TO_METERS
 
-        # Max alt should be changed to meters
+        # Maximum altitude in meters.
         max_alt: float = (
             ac_performance.model_info['General_Information']['max_alt_ft']
             * FEET_TO_METERS
         )
 
-        # Check if starting altitude is above operating ceiling;
-        # if true, set start altitude to
-        # departure airport altitude
+        # If starting altitude is above operating ceiling, set start altitude
+        # to departure airport altitude.
         if clm_start_altitude >= max_alt:
             clm_start_altitude = mission.dep_location.altitude
 
-        # Cruise altitude is the operating ceiling - 7000 feet
+        # Cruise altitude is the operating ceiling - 7000 feet.
         crz_start_altitude = max_alt - 7000.0 * FEET_TO_METERS
 
-        # Ensure cruise altitude is above the starting altitude
+        # Ensure cruise altitude is above the starting altitude.
         if crz_start_altitude < clm_start_altitude:
             crz_start_altitude = clm_start_altitude
 
-        # Prevent flying above A/C ceiling (NOTE: this will only trigger due to random
-        # variables not currently implemented)
+        # Prevent flying above aircraft ceiling. (NOTE: this will only trigger
+        # due to random variables not currently implemented.)
         if crz_start_altitude > max_alt:
             crz_start_altitude = max_alt
 
-        # In legacy trajectory, descent start altitude is equal to cruise altitude
+        # In legacy trajectory, descent start altitude is equal to cruise
+        # altitude.
         des_start_altitude = crz_start_altitude
 
         # Set descent altitude based on 3000' above arrival airport altitude;
-        # clamp to A/C operating
-        # ceiling if needed
+        # clamp to aircraft operating ceiling if needed.
         des_end_altitude = mission.arr_location.altitude + 3000.0 * FEET_TO_METERS
         if des_end_altitude >= max_alt:
             des_end_altitude = max_alt
 
-        # Save relevant flight levels
+        # Save relevant flight levels.
         self.crz_FL = crz_start_altitude * METERS_TO_FEET / 100
         self.clm_FL = clm_start_altitude * METERS_TO_FEET / 100
         self.des_FL = des_start_altitude * METERS_TO_FEET / 100
@@ -91,6 +98,7 @@ class LegacyContext(Context):
         # Get the indices for 0-ROC performance.
         self.__get_zero_roc_index(ac_performance)
 
+        # Pass information to base context class constructor.
         super().__init__(
             builder,
             ac_performance,
@@ -106,7 +114,7 @@ class LegacyContext(Context):
         )
 
     def __calc_crz_FLs(self, ac_performance: PerformanceModel) -> None:
-        """Get the bounding cruise flight levels (for which data exists)"""
+        """Get the bounding cruise flight levels (for which data exists)."""
 
         # Get the two flight levels in data closest to the cruise FL
         self.crz_FL_inds = ac_performance.search_flight_levels_ind(self.crz_FL)
@@ -117,7 +125,7 @@ class LegacyContext(Context):
     def __get_zero_roc_index(
         self, ac_performance: PerformanceModel, roc_zero_tol: float = 1e-6
     ) -> None:
-        """Get the index along the ROC axis of performance where ROC == 0
+        """Get the index along the ROC axis of performance where ROC == 0.
 
         Args:
             roc_zero_tol (float, optional): Tolerance at which ROC is
@@ -131,8 +139,7 @@ class LegacyContext(Context):
 
 class LegacyBuilder(Builder):
     """Model for determining flight trajectories using the legacy method
-    from AEIC v2. Contains all attributes listed in Trajectory plus the
-    ones listed here.
+    from AEIC v2.
 
     Args:
         options (Options): Base options for trajectory building.
@@ -141,14 +148,6 @@ class LegacyBuilder(Builder):
     """
 
     CONTEXT_CLASS = LegacyContext
-
-    # Attributes:
-    #     crz_FLs (list[float]): Flight levels in the performance data bounding the
-    #         constant altitude cruise FL.
-    #     crz_FL_inds (list[int]): Indices of the flight levels bounding the constant
-    #         altitude cruise FL.
-    #     zero_roc_mask (NDArray[bool]): mask on the rate-of-climb data; True only where
-    #         ROC = 0.
 
     def __init__(
         self,
@@ -167,9 +166,9 @@ class LegacyBuilder(Builder):
 
     def calc_starting_mass(self, **kwargs) -> float:
         """Calculates the starting mass using AEIC v2 methods.
-        Sets both starting mass and non-reserve/hold/divert fuel mass"""
+        Sets both starting mass and non-reserve/hold/divert fuel mass."""
 
-        # Use the highest value of mass per AEIC v2 method
+        # Use the highest value of mass per AEIC v2 method.
         mass_ind = [len(self.ac_performance.performance_table_cols[-1]) - 1]
 
         # NOTE: The types of all the arguments to np.ix_ need to be the same to
@@ -209,7 +208,7 @@ class LegacyBuilder(Builder):
                 f"{np.shape(ff_mat)})"
             )
 
-        # Now perform the necessary interpolations in TAS and fuel flow
+        # Now perform the necessary interpolations in TAS and fuel flow.
         FL_weighting = (self.crz_FL - self.crz_FLs[0]) / (
             self.crz_FLs[1] - self.crz_FLs[0]
         )
@@ -230,23 +229,23 @@ class LegacyBuilder(Builder):
         #      | _______________________
         #        = Take-off weight
 
-        # Empty mass per BADA-3 (low mass / 1.2)
+        # Empty mass per BADA-3 (low mass / 1.2).
         emptyMass = self.ac_performance.performance_table_cols[-1][0] / 1.2
 
-        # Payload
+        # Payload.
         payloadMass = (
             self.ac_performance.model_info['General_Information']['max_payload_kg']
             * self.mission.load_factor
         )
 
-        # Fuel Needed (distance / velocity * fuel flow rate)
+        # Fuel Needed (distance / velocity * fuel flow rate).
         approxTime = self.mission.gc_distance / tas
         fuelMass = approxTime * fuelflow
 
-        # Reserve fuel (assumed 5%)
+        # Reserve fuel (assumed 5%).
         reserveMass = fuelMass * 0.05
 
-        # Diversion fuel per AEIC v2
+        # Diversion fuel per AEIC v2.
         if approxTime / 60 > 180:  # > 180 minutes
             divertMass = 200.0 * NAUTICAL_MILES_TO_METERS / tas * fuelflow
             holdMass = 30 * 60 * tas  # 30 min; using cruise ff here
@@ -258,18 +257,17 @@ class LegacyBuilder(Builder):
             emptyMass + payloadMass + fuelMass + reserveMass + divertMass + holdMass
         )
 
-        # Limit to MTOM if overweight
+        # Limit to MTOM if overweight.
         if starting_mass > self.ac_performance.performance_table_cols[-1][-1]:
             starting_mass = self.ac_performance.performance_table_cols[-1][-1]
 
-        # Set fuel mass (for weight residual calculation)
-        # XXX: IN CONTEXT? RETURN AS TUPLE?
-        self.fuel_mass = fuelMass
+        # Set fuel mass (for weight residual calculation).
+        self.ctx.fuel_mass = fuelMass
 
         return starting_mass
 
     def climb(self, traj: Trajectory, **kwargs) -> None:
-        """Function called by ``fly_flight_iteration()`` to simulate climb"""
+        """Simulate climb phase."""
 
         dAlt = (self.crz_start_altitude - self.clm_start_altitude) / (self.NClm - 1)
         if dAlt < 0:
@@ -285,13 +283,13 @@ class LegacyBuilder(Builder):
         self.__legacy_climb(traj)
 
     def cruise(self, traj: Trajectory, **kwargs):
-        """Function called by ``fly_flight_iteration()`` to simulate cruise"""
+        """Simulate cruise phase."""
 
-        # Start cruise at end-of-climb position and mass (fuel flow, TAS will be
-        # replaced)
+        # Start cruise at end-of-climb position and mass (fuel flow, TAS will
+        # be replaced).
         traj.copy_point(self.NClm - 1, self.NClm)
 
-        # Cruise at constant altitude
+        # Cruise at constant altitude.
         traj.altitude[self.NClm : self.NClm + self.NCrz] = self.crz_start_altitude
 
         descent_dist_approx = 18.23 * (self.des_start_altitude - self.des_end_altitude)
@@ -304,23 +302,23 @@ class LegacyBuilder(Builder):
             self.mission.gc_distance - cruise_start_distance - descent_dist_approx
         )
 
-        # Cruise is discretized into ground distance steps
+        # Cruise is discretized into ground distance steps.
         cruise_end_distance = cruise_start_distance + cruise_dist_approx
         cruise_distance_values = np.linspace(
             cruise_start_distance, cruise_end_distance, self.NCrz
         )
         traj.groundDist[self.NClm : self.NClm + self.NCrz] = cruise_distance_values
 
-        # Get distance step size
+        # Get distance step size.
         dGD = cruise_dist_approx / (self.NCrz - 1)
 
         self.__legacy_cruise(dGD, traj)
 
     def descent(self, traj: Trajectory, **kwargs):
-        """Function called by ``fly_flight_iteration()`` to simulate descent"""
+        """Simulate descent phase."""
 
-        # Start descent at end-of-cruise position and mass (fuel flow, TAS will be
-        # replaced)
+        # Start descent at end-of-cruise position and mass (fuel flow, TAS will
+        # be replaced).
         traj.copy_point(self.NClm + self.NCrz - 1, self.NClm + self.NCrz)
 
         dAlt = (self.des_end_altitude - self.des_start_altitude) / (self.NDes)
@@ -343,9 +341,9 @@ class LegacyBuilder(Builder):
     def __calc_FL_interp_vals(
         self, alt: float, roc_perf: NDArray[np.float64]
     ) -> tuple[float, float, float, float, float]:
-        """Computes the state values that depend only on flight level. These include
-        true airspeed (TAS) and fuel flow (ff). Rate of climb (roc) is also only
-        dependent on FL in descent.
+        """Computes the state values that depend only on flight level. These
+        include true airspeed (TAS) and fuel flow (ff). Rate of climb (roc) is
+        also only dependent on FL in descent.
 
         Args:
             i (int): Index of the current point in the ``traj_data`` array.
@@ -356,6 +354,7 @@ class LegacyBuilder(Builder):
         Returns:
             Tuple[float]: TAS, fuel flow rate, and rate of climb at the specified
                 altitude
+
         """
 
         FL = alt * METERS_TO_FEET / 100
