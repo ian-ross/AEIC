@@ -42,9 +42,7 @@ class LegacyContext(Context):
         NDes = int(1 / builder.pctStepDes + 1)
 
         # Climb defined as starting 3000' above airport
-        clm_start_altitude = (
-            self.mission.dep_location.altitude + 3000.0 * FEET_TO_METERS
-        )
+        clm_start_altitude = mission.dep_location.altitude + 3000.0 * FEET_TO_METERS
 
         # Max alt should be changed to meters
         max_alt: float = (
@@ -88,10 +86,10 @@ class LegacyContext(Context):
 
         # Get the relevant bounding flight levels for cruise based on
         # performance data.
-        self.__calc_crz_FLs()
+        self.__calc_crz_FLs(ac_performance)
 
         # Get the indices for 0-ROC performance.
-        self.__get_zero_roc_index()
+        self.__get_zero_roc_index(ac_performance)
 
         super().__init__(
             builder,
@@ -107,16 +105,18 @@ class LegacyContext(Context):
             starting_mass,
         )
 
-    def __calc_crz_FLs(self) -> None:
+    def __calc_crz_FLs(self, ac_performance: PerformanceModel) -> None:
         """Get the bounding cruise flight levels (for which data exists)"""
 
         # Get the two flight levels in data closest to the cruise FL
-        self.crz_FL_inds = self.ac_performance.search_flight_levels_ind(self.crz_FL)
-        self.crz_FLs = np.array(self.ac_performance.performance_table_cols[0])[
+        self.crz_FL_inds = ac_performance.search_flight_levels_ind(self.crz_FL)
+        self.crz_FLs = np.array(ac_performance.performance_table_cols[0])[
             self.crz_FL_inds
         ]
 
-    def __get_zero_roc_index(self, roc_zero_tol: float = 1e-6) -> None:
+    def __get_zero_roc_index(
+        self, ac_performance: PerformanceModel, roc_zero_tol: float = 1e-6
+    ) -> None:
         """Get the index along the ROC axis of performance where ROC == 0
 
         Args:
@@ -125,8 +125,7 @@ class LegacyContext(Context):
         """
 
         self.zero_roc_mask = (
-            np.abs(np.array(self.ac_performance.performance_table_cols[2]))
-            < roc_zero_tol
+            np.abs(np.array(ac_performance.performance_table_cols[2])) < roc_zero_tol
         )
 
 

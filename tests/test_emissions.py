@@ -2,7 +2,8 @@ import numpy as np
 import pytest
 
 from AEIC.performance_model import PerformanceModel
-from AEIC.trajectories.legacy_trajectory import LegacyTrajectory
+from AEIC.trajectories.builders import Options
+from AEIC.trajectories.builders.legacy import LegacyBuilder
 from emissions.emission import Emission
 from utils import file_location
 
@@ -13,8 +14,8 @@ performance_model_file = file_location("IO/default_config.toml")
 perf = PerformanceModel(performance_model_file)
 mis = perf.missions[0]
 
-traj = LegacyTrajectory(perf, mis, False, False)
-traj.fly_flight()
+builder = LegacyBuilder(options=Options(iterate_mass=False))
+traj = builder.fly(perf, mis)
 em = Emission(perf, traj, True)
 
 # --- Unit tests ---
@@ -22,7 +23,7 @@ em = Emission(perf, traj, True)
 
 def test_fuel_burn_consumption():
     """Test if fuel burn per segment sums up to total fuel consumption"""
-    fuel_consumed = traj.traj_data['fuelMass'][0] - traj.traj_data['fuelMass'][-1]
+    fuel_consumed = traj.fuelMass[0] - traj.fuelMass[-1]
     assert pytest.approx(np.sum(em.fuel_burn_per_segment), rel=1e-6) == fuel_consumed
 
 
@@ -107,7 +108,7 @@ def test_total_emissions_sum():
 def test_trajectory_dimensions():
     """Test that trajectory dimensions are consistent"""
     assert em.Ntot == len(em.fuel_burn_per_segment)
-    assert em.Ntot == traj.Ntot
+    assert em.Ntot == len(traj)
     assert em.NClm + em.NCrz + em.NDes == em.Ntot
 
 
@@ -118,7 +119,7 @@ def test_fuel_burn_first_segment():
 
 def test_fuel_burn_decreasing_mass():
     """Test that fuel mass is monotonically decreasing"""
-    fuel_mass = traj.traj_data['fuelMass']
+    fuel_mass = traj.fuelMass
     assert np.all(np.diff(fuel_mass) <= 0), (
         "Fuel mass should be monotonically decreasing"
     )
@@ -260,7 +261,7 @@ def test_emission_units_consistency():
     # This is more of a documentation test
     # ensures the class produces results in expected units
     total_co2_kg = np.sum(em.pointwise_emissions_g['CO2']) / 1000.0  # Convert g to kg
-    fuel_consumed_kg = traj.traj_data['fuelMass'][0] - traj.traj_data['fuelMass'][-1]
+    fuel_consumed_kg = traj.fuelMass[0] - traj.fuelMass[-1]
 
     # CO2 per kg fuel should be reasonable (typically 3.1-3.2 kg CO2/kg fuel)
     if fuel_consumed_kg > 0:

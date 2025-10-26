@@ -5,7 +5,8 @@ import pytest
 
 # Add the src directory to the path to import modules
 from AEIC.performance_model import PerformanceModel
-from AEIC.trajectories.legacy_trajectory import LegacyTrajectory
+from AEIC.trajectories.builders import Options
+from AEIC.trajectories.builders.legacy import LegacyBuilder
 from emissions.APU_emissions import get_APU_emissions
 from emissions.EI_CO2 import EI_CO2
 from emissions.EI_H2O import EI_H2O
@@ -21,8 +22,8 @@ performance_model_file = file_location("IO/default_config.toml")
 perf = PerformanceModel(performance_model_file)
 mis = perf.missions[0]
 
-traj = LegacyTrajectory(perf, mis, False, False)
-traj.fly_flight()
+builder = LegacyBuilder(options=Options(iterate_mass=False))
+traj = builder.fly(perf, mis)
 em = Emission(perf, traj, True)
 
 

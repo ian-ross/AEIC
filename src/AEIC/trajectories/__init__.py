@@ -24,6 +24,34 @@ TRAJECTORY_FIELDS = {
     },
 }
 
+METADATA_FIELDS = {
+    'starting_mass': {
+        'type': float,
+        'description': 'Aircraft mass at start of trajectory',
+        'units': 'kg',
+    },
+    'fuel_mass': {
+        'type': float,
+        'description': 'Total fuel mass used during trajectory',
+        'units': 'kg',
+    },
+    'NClm': {
+        'type': int,
+        'description': 'Number of climb points in trajectory',
+        'units': 'count',
+    },
+    'NCrz': {
+        'type': int,
+        'description': 'Number of cruise points in trajectory',
+        'units': 'count',
+    },
+    'NDes': {
+        'type': int,
+        'description': 'Number of descent points in trajectory',
+        'units': 'count',
+    },
+}
+
 
 class Trajectory:
     def __init__(self, npoints: int, name: str | None = None):
@@ -32,6 +60,7 @@ class Trajectory:
         self.data = {
             name: np.zeros((npoints,), dtype=float) for name in TRAJECTORY_FIELDS.keys()
         }
+        self.metadata = {name: None for name in METADATA_FIELDS.keys()}
 
     def __len__(self):
         return self.npoints
@@ -39,6 +68,8 @@ class Trajectory:
     def __getattr__(self, name):
         if name in TRAJECTORY_FIELDS:
             return self.data[name]
+        if name in METADATA_FIELDS:
+            return self.metadata[name]
         raise AttributeError(f"'Trajectory' object has no attribute '{name}'")
 
     def __setattr__(self, name, value):
@@ -46,6 +77,13 @@ class Trajectory:
             if len(value) != self.npoints:
                 raise ValueError('Assigned length does not match number of points')
             self.data[name] = np.asarray(value, dtype=float)
+        elif name in METADATA_FIELDS:
+            expected_type = METADATA_FIELDS[name]['type']
+            if not isinstance(value, expected_type) and value is not None:
+                raise TypeError(
+                    f'Expected type {expected_type} for metadata field {name}'
+                )
+            self.metadata[name] = value
         else:
             super().__setattr__(name, value)
 
@@ -136,20 +174,26 @@ class TrajectorySet:
             ),
         )
 
-        # TODO: Add other application-specific global attributes here as
-        # needed.
-
-        # TODO: Add other global or variable-level CF attributes here as
-        # needed.
-
         # Add data variables with metadata.
-        for var_name, metadata in TRAJECTORY_FIELDS.items():
-            ds[var_name] = (
+        for name, metadata in TRAJECTORY_FIELDS.items():
+            ds[name] = (
                 'point',
-                np.concatenate([getattr(t, var_name) for t in self._trajectories]),
+                np.concatenate([getattr(t, name) for t in self._trajectories]),
             )
-            ds[var_name].attrs['description'] = metadata['description']
-            ds[var_name].attrs['units'] = metadata['units']
+            ds[name].attrs['description'] = metadata['description']
+            ds[name].attrs['units'] = metadata['units']
+
+        # Add metadata variables for each trajectory.
+        for name, metadata in METADATA_FIELDS.items():
+            ds[name] = (
+                'trajectory',
+                [
+                    getattr(t, name) if getattr(t, name) is not None else np.nan
+                    for t in self._trajectories
+                ],
+            )
+            ds[name].attrs['description'] = metadata['description']
+            ds[name].attrs['units'] = metadata['units']
 
         return ds
 

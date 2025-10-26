@@ -30,15 +30,6 @@ class Options:
 
 
 @dataclass
-class Result:
-    """Result of trajectory simulation."""
-
-    trajectory: Trajectory
-    starting_mass: float
-    fuel_mass: float
-
-
-@dataclass
 class Context:
     """Transient context used during trajectory building.
 
@@ -143,7 +134,7 @@ class Builder(ABC):
         mission: Mission,
         startMass: float | None = None,
         **kwargs,
-    ) -> Result:
+    ) -> Trajectory:
         """Top-level function that initiates and runs flights.
 
         As well as the fixed arguments listed below, this can also take
@@ -205,12 +196,14 @@ class Builder(ABC):
             # Do the simulation.
             self._fly(traj, **kwargs)
 
-            # If everything was OK, we return the filled-in trajectory here.
-            return Result(
-                trajectory=traj,
-                starting_mass=self.starting_mass,
-                fuel_mass=self.fuel_mass,
-            )
+            # If everything was OK, we return the filled-in trajectory here,
+            # setting up metadata variables before we do.
+            traj.starting_mass = self.starting_mass
+            traj.fuel_mass = self.fuel_mass
+            traj.NClm = self.NClm
+            traj.NCrz = self.NCrz
+            traj.NDes = self.NDes
+            return traj
         finally:
             # Remove the context: this only exists during the simulation of a
             # trajectory.
