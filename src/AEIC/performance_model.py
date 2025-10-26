@@ -162,7 +162,7 @@ class PerformanceModel:
 
         # Prepare multidimensional shape and index arrays
         shape = tuple(len(input_values[col]) for col in input_col_names)
-        fuel_flow_array = np.empty(shape)
+        fuel_flow_array = np.zeros(shape)
 
         # Get index arrays for each input variable
         index_arrays = [
