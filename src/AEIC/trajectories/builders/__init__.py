@@ -57,18 +57,8 @@ class Context:
     NDes: int
     """Number of trajectory points for the descent phase."""
 
-    clm_start_altitude: float
-    """Overall starting altitude for the trajectory, i.e., the start altitude
-    for the climb phase."""
-
-    crz_start_altitude: float
-    """Start altitude for cruise phase."""
-
-    des_start_altitude: float
-    """Start altitude for descent phase."""
-
-    des_end_altitude: float
-    """Final altitude at end of descent phase."""
+    initial_altitude: float
+    """Overall starting altitude for the trajectory."""
 
     starting_mass: float = -1.0
     """Aircraft mass at beginning of trajectory. Sentinal value (-1.0) is used
@@ -116,17 +106,37 @@ class Builder(ABC):
         simulation. To avoid having to write `self.ctx` everywhere we want to
         access this information, we redirect attribute accesses to retrieve
         context information as required.
-
-        We do *not* redirect `__setattr__` in the same way: setting of
-        attributes has to be done explicitly, whether that's on the builder
-        object itself (though that shouldn't happen) or the context.
         """
-        if hasattr(self, 'ctx') and self.ctx is not None:
-            if hasattr(self.ctx, name):
-                return getattr(self.ctx, name)
+        try:
+            # Use __getattribute__ here to avoid infinite recursion.
+            ctx = self.__getattribute__('ctx')
+            if hasattr(ctx, name):
+                return getattr(ctx, name)
+        except AttributeError:
+            pass
         raise AttributeError(
             f"'{type(self).__name__}' object has no attribute '{name}'"
         )
+
+    def __setattr__(self, name: str, value):
+        """Custom attribute setter to allow access to context attributes.
+
+        The implementation of `__setattr__` only sets *existing* attributes on
+        the context. Adding new attributes to the context has to be done
+        explicitly! This seems like the minimally confusing and maximally
+        convenient behavior here.
+        """
+        try:
+            # Use __getattribute__ here to avoid mutual recursion with
+            # __getattr__.
+            ctx = self.__getattribute__('ctx')
+            if hasattr(ctx, name):
+                return setattr(ctx, name, value)
+        except AttributeError:
+            pass
+
+        # For attributes not in the context, use default behavior.
+        return super().__setattr__(name, value)
 
     @property
     def Ntot(self) -> int:
@@ -186,7 +196,7 @@ class Builder(ABC):
             # value here is a little ugly, but it allows us to keep the type of
             # starting_mass in the context as float, rather than float | None.)
             if self.starting_mass == -1.0:
-                self.ctx.starting_mass = self.calc_starting_mass(**kwargs)
+                self.starting_mass = self.calc_starting_mass(**kwargs)
 
             # Set up trajectory: all initial values are zero, but that's OK,
             # because we're going to fill those values in before we return from
@@ -266,7 +276,7 @@ class Builder(ABC):
         traj.acMass[0] = self.starting_mass
         traj.fuelMass[0] = self.fuel_mass
         traj.groundDist[0] = 0
-        traj.altitude[0] = self.clm_start_altitude
+        traj.altitude[0] = self.initial_altitude
 
         # Calculate lat, lon, heading of initial point.
         # Get great circle trajectory in lat,lon points.

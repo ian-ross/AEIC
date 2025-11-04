@@ -50,7 +50,9 @@ class LegacyContext(Context):
         NDes = int(1 / builder.pctStepDes + 1)
 
         # Climb defined as starting 3000' above airport.
-        clm_start_altitude = mission.dep_location.altitude + 3000.0 * FEET_TO_METERS
+        self.clm_start_altitude = (
+            mission.dep_location.altitude + 3000.0 * FEET_TO_METERS
+        )
 
         # Maximum altitude in meters.
         max_alt: float = (
@@ -60,36 +62,36 @@ class LegacyContext(Context):
 
         # If starting altitude is above operating ceiling, set start altitude
         # to departure airport altitude.
-        if clm_start_altitude >= max_alt:
-            clm_start_altitude = mission.dep_location.altitude
+        if self.clm_start_altitude >= max_alt:
+            self.clm_start_altitude = mission.dep_location.altitude
 
         # Cruise altitude is the operating ceiling - 7000 feet.
-        crz_start_altitude = max_alt - 7000.0 * FEET_TO_METERS
+        self.crz_start_altitude = max_alt - 7000.0 * FEET_TO_METERS
 
         # Ensure cruise altitude is above the starting altitude.
-        if crz_start_altitude < clm_start_altitude:
-            crz_start_altitude = clm_start_altitude
+        if self.crz_start_altitude < self.clm_start_altitude:
+            self.crz_start_altitude = self.clm_start_altitude
 
         # Prevent flying above aircraft ceiling. (NOTE: this will only trigger
         # due to random variables not currently implemented.)
-        if crz_start_altitude > max_alt:
-            crz_start_altitude = max_alt
+        if self.crz_start_altitude > max_alt:
+            self.crz_start_altitude = max_alt
 
         # In legacy trajectory, descent start altitude is equal to cruise
         # altitude.
-        des_start_altitude = crz_start_altitude
+        self.des_start_altitude = self.crz_start_altitude
 
         # Set descent altitude based on 3000' above arrival airport altitude;
         # clamp to aircraft operating ceiling if needed.
-        des_end_altitude = mission.arr_location.altitude + 3000.0 * FEET_TO_METERS
-        if des_end_altitude >= max_alt:
-            des_end_altitude = max_alt
+        self.des_end_altitude = mission.arr_location.altitude + 3000.0 * FEET_TO_METERS
+        if self.des_end_altitude >= max_alt:
+            self.des_end_altitude = max_alt
 
         # Save relevant flight levels.
-        self.crz_FL = crz_start_altitude * METERS_TO_FEET / 100
-        self.clm_FL = clm_start_altitude * METERS_TO_FEET / 100
-        self.des_FL = des_start_altitude * METERS_TO_FEET / 100
-        self.end_FL = des_end_altitude * METERS_TO_FEET / 100
+        self.crz_FL = self.crz_start_altitude * METERS_TO_FEET / 100
+        self.clm_FL = self.clm_start_altitude * METERS_TO_FEET / 100
+        self.des_FL = self.des_start_altitude * METERS_TO_FEET / 100
+        self.end_FL = self.des_end_altitude * METERS_TO_FEET / 100
 
         # Get the relevant bounding flight levels for cruise based on
         # performance data.
@@ -106,10 +108,7 @@ class LegacyContext(Context):
             NClm,
             NCrz,
             NDes,
-            clm_start_altitude,
-            crz_start_altitude,
-            des_start_altitude,
-            des_end_altitude,
+            self.clm_start_altitude,
             starting_mass,
         )
 
@@ -262,7 +261,7 @@ class LegacyBuilder(Builder):
             starting_mass = self.ac_performance.performance_table_cols[-1][-1]
 
         # Set fuel mass (for weight residual calculation).
-        self.ctx.fuel_mass = fuelMass
+        self.fuel_mass = fuelMass
 
         return starting_mass
 
