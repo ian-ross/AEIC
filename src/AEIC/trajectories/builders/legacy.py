@@ -10,6 +10,7 @@ from utils.units import FEET_TO_METERS, METERS_TO_FEET, NAUTICAL_MILES_TO_METERS
 from utils.weather_utils import compute_ground_speed
 
 from .. import Trajectory
+from ..ground_track import GroundTrack
 from . import Builder, Context, Options
 
 
@@ -49,9 +50,15 @@ class LegacyContext(Context):
         NCrz = int(1 / builder.pctStepCrz + 1)
         NDes = int(1 / builder.pctStepDes + 1)
 
+        # Generate great circle ground track between departure and arrival
+        # locations.
+        ground_track = GroundTrack.great_circle(
+            mission.dep_position.location, mission.arr_position.location
+        )
+
         # Climb defined as starting 3000' above airport.
         self.clm_start_altitude = (
-            mission.dep_location.altitude + 3000.0 * FEET_TO_METERS
+            mission.dep_position.altitude + 3000.0 * FEET_TO_METERS
         )
 
         # Maximum altitude in meters.
@@ -63,7 +70,7 @@ class LegacyContext(Context):
         # If starting altitude is above operating ceiling, set start altitude
         # to departure airport altitude.
         if self.clm_start_altitude >= max_alt:
-            self.clm_start_altitude = mission.dep_location.altitude
+            self.clm_start_altitude = mission.dep_position.altitude
 
         # Cruise altitude is the operating ceiling - 7000 feet.
         self.crz_start_altitude = max_alt - 7000.0 * FEET_TO_METERS
@@ -83,7 +90,7 @@ class LegacyContext(Context):
 
         # Set descent altitude based on 3000' above arrival airport altitude;
         # clamp to aircraft operating ceiling if needed.
-        self.des_end_altitude = mission.arr_location.altitude + 3000.0 * FEET_TO_METERS
+        self.des_end_altitude = mission.arr_position.altitude + 3000.0 * FEET_TO_METERS
         if self.des_end_altitude >= max_alt:
             self.des_end_altitude = max_alt
 
@@ -105,6 +112,7 @@ class LegacyContext(Context):
             builder,
             ac_performance,
             mission,
+            ground_track,
             NClm,
             NCrz,
             NDes,
@@ -152,8 +160,10 @@ class LegacyBuilder(Builder):
         self,
         options: Options = Options(),
         legacy_options: LegacyOptions = LegacyOptions(),
+        *args,
+        **kwargs,
     ):
-        super().__init__(options)
+        super().__init__(options, *args, **kwargs)
 
         # Define discretization of each phase in steps as a percent of
         # the overall distance/altitude change
@@ -238,7 +248,7 @@ class LegacyBuilder(Builder):
         )
 
         # Fuel Needed (distance / velocity * fuel flow rate).
-        approxTime = self.mission.gc_distance / tas
+        approxTime = self.ground_track.total_distance / tas
         fuelMass = approxTime * fuelflow
 
         # Reserve fuel (assumed 5%).
@@ -298,7 +308,9 @@ class LegacyBuilder(Builder):
 
         cruise_start_distance = traj.groundDist[self.NClm - 1]
         cruise_dist_approx = (
-            self.mission.gc_distance - cruise_start_distance - descent_dist_approx
+            self.ground_track.total_distance
+            - cruise_start_distance
+            - descent_dist_approx
         )
 
         # Cruise is discretized into ground distance steps.
@@ -654,21 +666,12 @@ class LegacyBuilder(Builder):
             # Calculate distance along route travelled
             dist = traj.groundSpeed[i] * segment_time
 
-            traj.longitude[i + 1], traj.latitude[i + 1], _ = self.GEOD.fwd(
-                traj.longitude[i],
-                traj.latitude[i],
-                traj.azimuth[i],
-                dist,
-            )
+            # Take step along great circle route.
+            pt = self.ground_track.step(traj.groundDist[i], dist)
+            traj.longitude[i + 1] = pt.location.longitude
+            traj.latitude[i + 1] = pt.location.latitude
+            traj.azimuth[i + 1] = pt.azimuth
 
-            lon_arr = self.mission.arr_location.longitude
-            lat_arr = self.mission.arr_location.latitude
-            traj.azimuth[i + 1], _, _ = self.GEOD.inv(
-                traj.longitude[i],
-                traj.latitude[i],
-                lon_arr,
-                lat_arr,
-            )
             # Account for acceleration/deceleration over
             # the segment using end-of-segment tas
             tas_end = traj.tas[i + 1]
@@ -726,20 +729,11 @@ class LegacyBuilder(Builder):
             # Calculate time required to fly the segment
             segment_time = dGD / traj.groundSpeed[i]
 
-            traj.longitude[i + 1], traj.latitude[i + 1], _ = self.GEOD.fwd(
-                traj.longitude[i],
-                traj.latitude[i],
-                traj.azimuth[i],
-                dGD,
-            )
-            lon_arr = self.mission.arr_location.longitude
-            lat_arr = self.mission.arr_location.latitude
-            traj.azimuth[i + 1], _, _ = self.GEOD.inv(
-                traj.longitude[i],
-                traj.latitude[i],
-                lon_arr,
-                lat_arr,
-            )
+            # Take step along great circle route.
+            pt = self.ground_track.step(traj.groundDist[i], dGD)
+            traj.longitude[i + 1] = pt.location.longitude
+            traj.latitude[i + 1] = pt.location.latitude
+            traj.azimuth[i + 1] = pt.azimuth
 
             # Get fuel flow rate based on FL and mass interpolation
             ff = self.__calc_ff_cruise(
@@ -823,20 +817,11 @@ class LegacyBuilder(Builder):
             # Calculate distance along route travelled
             dist = traj.groundSpeed[i] * segment_time
 
-            traj.longitude[i + 1], traj.latitude[i + 1], _ = self.GEOD.fwd(
-                traj.longitude[i],
-                traj.latitude[i],
-                traj.azimuth[i],
-                dist,
-            )
-            lon_arr = self.mission.arr_location.longitude
-            lat_arr = self.mission.arr_location.latitude
-            traj.azimuth[i + 1], _, _ = self.GEOD.inv(
-                traj.longitude[i],
-                traj.latitude[i],
-                lon_arr,
-                lat_arr,
-            )
+            # Take step along great circle route.
+            pt = self.ground_track.step(traj.groundDist[i], dist)
+            traj.longitude[i + 1] = pt.location.longitude
+            traj.latitude[i + 1] = pt.location.latitude
+            traj.azimuth[i + 1] = pt.azimuth
 
             # Account for acceleration/deceleration over the segment
             # using end-of-segment tas

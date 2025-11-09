@@ -1,12 +1,11 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from pyproj import Geod
-
 from AEIC.performance_model import PerformanceModel
 from missions import Mission
 
 from .. import Trajectory
+from ..ground_track import GroundTrack
 
 
 @dataclass
@@ -48,6 +47,9 @@ class Context:
     mission: Mission
     """Mission data (departure/arrival info, etc.)."""
 
+    ground_track: GroundTrack
+    """Ground track for the trajectory."""
+
     NClm: int
     """Number of trajectory points for the climb phase."""
 
@@ -78,13 +80,11 @@ class Builder(ABC):
         options (Options): Options for trajectory building.
     """
 
-    GEOD = Geod(ellps="WGS84")
-
     CONTEXT_CLASS: type | None = None
     """Class for trajectory building context. Should be derived from base
     Context class."""
 
-    def __init__(self, options: Options = Options()) -> None:
+    def __init__(self, options: Options = Options(), *args, **kwargs) -> None:
         """Initialize trajectory builder with common options."""
 
         # Check that the context class has been defined properly in the
@@ -203,12 +203,18 @@ class Builder(ABC):
             # this function, and we're only going to return this trajectory if
             # nothing goes wrong along the way. We give the trajectory a name
             # to identify it in `TrajectorySets` and intermediate NetCDF files.
+            print(type(self.NClm), type(self.NCrz), type(self.NDes))
             traj = Trajectory(
                 self.Ntot,
                 name=(f'{mission.dep_airport}_{mission.arr_airport}_{mission.ac_code}'),
             )
 
-            # Do the simulation.
+            # Do the simulation, initializing start location and azimuth from
+            # ground track before we start.
+            start = self.ground_track[0]
+            traj.longitude[0] = start.location.longitude
+            traj.latitude[0] = start.location.latitude
+            traj.azimuth[0] = start.azimuth
             self._fly(traj, **kwargs)
 
             # If everything was OK, we return the filled-in trajectory here,
@@ -271,29 +277,17 @@ class Builder(ABC):
 
         self.current_mass = self.starting_mass
 
-        # Set initial values.
+        # Set initial values, taking initial position and azimuth from ground
+        # track.
         traj.flightTime[0] = 0
         traj.acMass[0] = self.starting_mass
         traj.fuelMass[0] = self.fuel_mass
         traj.groundDist[0] = 0
         traj.altitude[0] = self.initial_altitude
-
-        # Calculate lat, lon, heading of initial point.
-        # Get great circle trajectory in lat,lon points.
-        # lat_lon_trajectory = self.GEOD.npts(
-        #                   self.mission.dep_location.longitude,
-        #                   self.mission.dep_location.latitude,
-        #                   self.mission.arr_location.longitude,
-        #                   self.mission.arr_location.latitude,
-        #                   self.Ntot)
-        traj.latitude[0] = self.mission.dep_location.latitude
-        traj.longitude[0] = self.mission.dep_location.longitude
-        traj.azimuth[0], _, _ = self.GEOD.inv(
-            self.mission.dep_location.longitude,
-            self.mission.dep_location.latitude,
-            self.mission.arr_location.longitude,
-            self.mission.arr_location.latitude,
-        )
+        start = self.ground_track[0]
+        traj.longitude[0] = start.location.longitude
+        traj.latitude[0] = start.location.latitude
+        traj.azimuth[0] = start.azimuth
 
         # Fly the climb, cruise, descent segments in order.
         self.climb(traj, **kwargs)

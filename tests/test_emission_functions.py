@@ -23,6 +23,7 @@ perf = PerformanceModel(performance_model_file)
 mis = perf.missions[0]
 
 builder = tb.LegacyBuilder(options=tb.Options(iterate_mass=False))
+print('Mission:', mis)
 traj = builder.fly(perf, mis)
 em = Emission(perf, traj, True)
 
