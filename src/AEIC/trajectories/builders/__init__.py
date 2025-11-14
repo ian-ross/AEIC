@@ -203,7 +203,6 @@ class Builder(ABC):
             # this function, and we're only going to return this trajectory if
             # nothing goes wrong along the way. We give the trajectory a name
             # to identify it in `TrajectorySets` and intermediate NetCDF files.
-            print(type(self.NClm), type(self.NCrz), type(self.NDes))
             traj = Trajectory(
                 self.Ntot,
                 name=(f'{mission.dep_airport}_{mission.arr_airport}_{mission.ac_code}'),
