@@ -3,10 +3,13 @@ from pathlib import Path
 from typing import ClassVar
 
 import numpy as np
+import pytest
 
 from AEIC.trajectories.field_sets import FieldMetadata, FieldSet
 from AEIC.trajectories.store import TrajectoryStore
 from AEIC.trajectories.trajectory import Trajectory
+
+# Some extra fields in a field set to add to trajectories for testing.
 
 
 @dataclass
@@ -23,6 +26,10 @@ class Extras:
         ),
     )
 
+    # Note type of mf is int, not np.int32. Conversion is done by the
+    # trajectory store when saving data. The field_type in FieldMetadata has to
+    # be a Numpy type!
+
     f1: np.ndarray
     f2: np.ndarray
     mf: int
@@ -37,6 +44,8 @@ class Extras:
 
 
 def make_test_trajectory(npoints: int, seed: int) -> Trajectory:
+    # Need a way of getting test trajectories with all their fields populated.
+    # The trajectory store doesn't like incomplete data.
     t = Trajectory(npoints, name=f'traj_{seed}')
     t.fuelFlow = np.random.rand(npoints) * 5000 + 2000
     t.acMass = np.random.rand(npoints) * 50000 + 100000
@@ -61,133 +70,161 @@ def make_test_trajectory(npoints: int, seed: int) -> Trajectory:
     return t
 
 
-def test_use_case_1():
-    # USE CASE 1: create a small TrajectoryStore, save to NetCDF, disabling
-    # further appending (closes NetCDF file), reload from NetCDF.
+def test_init_checking():
+    # Missing NetCDF file name when creating or appending.
+    with pytest.raises(ValueError):
+        _ = TrajectoryStore.open()
+    with pytest.raises(ValueError):
+        _ = TrajectoryStore.append()
 
-    Path('use_case_1.nc').unlink(missing_ok=True)
-    tset = TrajectoryStore(
-        title='Use case 1',
-        nc_file='use_case_1.nc',
-        mode=TrajectoryStore.FileMode.CREATE,
-    )
-    tset.add(make_test_trajectory(10, 1))
-    tset.add(make_test_trajectory(15, 2))
-    tset.close()
+    # Specifying global attributes in non-create modes.
+    with pytest.raises(ValueError):
+        _ = TrajectoryStore.open(nc_file='test.nc', title='Test')
+    with pytest.raises(ValueError):
+        _ = TrajectoryStore.append(nc_file='test.nc', title='Test')
 
-    tset_loaded = TrajectoryStore(nc_file='use_case_1.nc')
-    assert tset_loaded.global_attributes['title'] == 'Use case 1'
-    assert len(tset_loaded) == 2
-    assert len(tset_loaded[0]) == 10
-    assert len(tset_loaded[1]) == 15
+    # TODO: MORE HERE...
 
 
-def test_use_case_2():
-    # USE CASE 2: create a TrajectoryStore, save to NetCDF, close, reopen file
-    # in append mode, add another trajectory, close NetCDF file and reload from
-    # NetCDF.
+def test_create_reopen(tmp_path: Path):
+    # Create a small TrajectoryStore, save to NetCDF, disabling further
+    # appending (closes NetCDF file), reload from NetCDF.
 
-    tset2 = TrajectoryStore(
-        title='Use case 2',
-        nc_file='use_case_2.nc',
-        mode=TrajectoryStore.FileMode.CREATE,
-    )
-    tset2.add(Trajectory(10, name='traj1'))
-    tset2.add(Trajectory(15, name='traj2'))
-    tset2.close()
+    path = tmp_path / 'test.nc'
+    ts = TrajectoryStore.create(title='Use case 1', nc_file=path)
+    ts.add(make_test_trajectory(10, 1))
+    ts.add(make_test_trajectory(15, 2))
+    ts.close()
 
-    tset2a = TrajectoryStore(
-        nc_file='use_case_2.nc', mode=TrajectoryStore.FileMode.APPEND
-    )
-    tset2a.add(Trajectory(20, name='traj3'))
-    tset2a.close()
-
-    tset2_loaded = TrajectoryStore(nc_file='use_case_2.nc')
-    assert tset2_loaded.global_attributes['title'] == 'Use case 2'
-    assert len(tset2_loaded) == 3
-    assert len(tset2_loaded[0]) == 10
-    assert len(tset2_loaded[1]) == 15
-    assert len(tset2_loaded[2]) == 20
+    ts_read = TrajectoryStore.open(nc_file=path)
+    assert ts_read.global_attributes['title'] == 'Use case 1'
+    assert len(ts_read) == 2
+    assert len(ts_read[0]) == 10
+    assert len(ts_read[1]) == 15
 
 
-def test_use_case_3():
-    # USE CASE 3: create large TrajectoryStore linked with NetCDF file for
+def test_create_append_reopen(tmp_path: Path):
+    # Create a TrajectoryStore, save to NetCDF, close, reopen file in append
+    # mode, add another trajectory, close NetCDF file and reload from NetCDF.
+
+    path = tmp_path / 'test.nc'
+    ts = TrajectoryStore.create(title='Use case 2', nc_file=path)
+    ts.add(make_test_trajectory(10, 1))
+    ts.add(make_test_trajectory(15, 2))
+    ts.close()
+
+    ts2 = TrajectoryStore.append(nc_file=path)
+    ts2.add(make_test_trajectory(20, 3))
+    ts2.close()
+
+    ts_read = TrajectoryStore.open(nc_file=path)
+    assert ts_read.global_attributes['title'] == 'Use case 2'
+    assert len(ts_read) == 3
+    assert len(ts_read[0]) == 10
+    assert len(ts_read[1]) == 15
+    assert len(ts_read[2]) == 20
+
+
+@pytest.mark.skip(reason="VERY long test case, enable manually")
+def test_create_reopen_large(tmp_path: Path):
+    # Create large TrajectoryStore linked with NetCDF file (~13 Gb) for
     # writing, close the NetCDF file, reopen for reading and check contents.
 
-    tset3 = TrajectoryStore(
-        title='Use case 3',
-        nc_file='use_case_3.nc',
-        mode=TrajectoryStore.FileMode.CREATE,
-    )
+    path = tmp_path / 'test.nc'
+    ts = TrajectoryStore.create(title='Use case 3', nc_file=path)
     for i in range(1000000):
-        tset3.add(Trajectory(100, name=f'traj_{i}'))
-    tset3.close()
+        ts.add(make_test_trajectory(100, i))
+    ts.close()
 
-    tset3_loaded = TrajectoryStore(nc_file='use_case_3.nc')
-    assert len(tset3_loaded) == 1000000
-    assert len(tset3_loaded[200000]) == 100
-    assert len(tset3_loaded[999999]) == 100
+    ts_read = TrajectoryStore.open(nc_file=path)
+    assert len(ts_read) == 1000000
+    assert len(ts_read[200000]) == 100
+    assert len(ts_read[999999]) == 100
 
 
-def test_use_case_4():
-    # USE CASE 4: create TrajectoryStore with additional field set saved in
-    # base file. (This should result in a file with a "base" group and a "demo"
-    # group.)
+def test_extra_fields_in_base_nc(tmp_path: Path):
+    # Create TrajectoryStore with additional field set saved in base file.
+    # (This should result in a file with a "base" group and a "demo" group.)
 
-    tset4 = TrajectoryStore(
-        title='Use case 4',
-        nc_file='use_case_4.nc',
-        mode=TrajectoryStore.FileMode.CREATE,
-    )
+    path = tmp_path / 'test.nc'
+    ts = TrajectoryStore.create(title='Use case 4', nc_file=path)
     for i in range(1, 6):
-        t = Trajectory(i * 5, name=f'traj{i}')
+        t = make_test_trajectory(i * 5, i)
         t.add_fields(Extras.random(i * 5))
-        tset4.add(t)
-    tset4.close()
+        ts.add(t)
+    ts.close()
 
-    tset4_loaded = TrajectoryStore(nc_file='use_case_4.nc')
-    assert len(tset4_loaded) == 5
-    assert tset4_loaded.fieldsets == {'base', 'demo'}
-    assert tset4_loaded[2].f1.shape == (15,)
-    assert tset4_loaded[2].mf is not None
-
-
-# TODO: Related use case — add fields only to a sub-set of trajectories. Should
-# result in an error from the data dictionary hash check in
-# TrajectoryStore.add().
+    ts_read = TrajectoryStore.open(nc_file=path)
+    assert len(ts_read) == 5
+    assert ts_read.files[0].fieldsets == {'base', 'demo'}
+    assert ts_read[2].f1.shape == (15,)
+    assert ts_read[2].mf is not None
 
 
-def test_use_case_5():
-    # USE CASE 5: same thing, except save additional field set in an associated
-    # file.
+def test_extra_fields_in_base_nc_bad(tmp_path: Path):
+    # (BAD VERSION OF ABOVE TEST): create TrajectoryStore with additional field
+    # set saved in base file. (This should result in a file with a "base" group
+    # and a "demo" group.)
+    #
+    # Add fields only to a sub-set of trajectories. Should result in an error
+    # from the data dictionary hash check in TrajectoryStore.add().
 
-    tset5 = TrajectoryStore(
+    with pytest.raises(ValueError):
+        path = tmp_path / 'test.nc'
+        ts = TrajectoryStore.create(title='Use case 4', nc_file=path)
+        for i in range(1, 6):
+            t = make_test_trajectory(i * 5, i)
+            if i % 2 == 1:
+                t.add_fields(Extras.random(i * 5))
+            ts.add(t)
+        ts.close()
+
+
+def test_extra_fields_in_associated_nc(tmp_path: Path):
+    # Same thing as last (good) case, except save additional field set in an
+    # associated file.
+
+    path = tmp_path / 'test.nc'
+    extra_path = tmp_path / 'extra.nc'
+    ts = TrajectoryStore.create(
         title='Use case 5',
-        nc_file='use_case_5.nc',
-        mode=TrajectoryStore.FileMode.CREATE,
-        associated_nc_files=[('demo_fields.nc', ['demo'])],
+        nc_file=path,
+        associated_nc_files=[(extra_path, ['demo'])],
     )
     for i in range(1, 6):
-        t = Trajectory(i * 5, name=f'traj{i}')
+        t = make_test_trajectory(i * 5, i)
         t.add_fields(Extras.random(i * 5))
-        tset5.add(t)
-    tset5.close()
+        ts.add(t)
+    ts.close()
 
-    # TODO: Append to the files here...
+    # Opening just the base NetCDF file (without the associated file) should
+    # give trajectories without the extra fields.
+    ts_read = TrajectoryStore.open(nc_file=path)
+    assert len(ts_read) == 5
+    assert len(ts_read.files) == 1
+    assert ts_read.files[0].fieldsets == {'base'}
+    t = ts_read[2]
+    assert hasattr(t, 'acMass')
+    assert not hasattr(t, 'f1')
 
-    tset5_loaded = TrajectoryStore(nc_file='use_case_5.nc')
-    assert len(tset5_loaded) == 5
-    assert tset5_loaded.fieldsets == {'base'}
-    assert tset5_loaded[2].f1.shape == (15,)
-    assert tset5_loaded[2].mf is not None
+    # Opening with the associated file should give trajectories with the
+    # extra fields.
+    ts2_read = TrajectoryStore.open(nc_file=path, associated_nc_files=[extra_path])
+    assert len(ts2_read) == 5
+    assert len(ts2_read.files) == 2
+    assert ts2_read.files[0].fieldsets == {'base'}
+    assert ts2_read.files[1].fieldsets == {'demo'}
+    assert ts2_read[2].f1.shape == (15,)
+    assert ts2_read[2].mf is not None
 
-    tset5a_loaded = TrajectoryStore(
-        nc_file='use_case_5.nc', associated_nc_files=['demo_fields.nc']
-    )
-    assert len(tset5a_loaded) == 5
-    assert tset5a_loaded.fieldsets == {'base', 'demo'}
-    assert tset5a_loaded[2].f1.shape == (15,)
-    assert tset5a_loaded[2].mf is not None
+
+# TODO: Equivalent of last case with appending to the files in between creating
+# and reading the store.
+
+
+# TODO: Test case where we try to open associated file that doesn't match the
+# base file (different number of trajectories, different trajectory names,
+# etc.)
 
 
 def test_use_case_6():

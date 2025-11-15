@@ -177,32 +177,16 @@ class Trajectory:
                 raise ValueError('Assigned length does not match number of points')
 
             # Check that the type of the assigned value can be safely cast to
-            # the field type.
-            expected_type = self.data_dictionary[name].field_type
-            if not np.can_cast(value, expected_type, casting='same_kind'):
-                raise TypeError(
-                    f'Cannot cast assigned value of type {type(value)} '
-                    f'to expected type {expected_type} for data field {name}'
-                )
-
-            # Cast and assign the value.
-            self.data[name] = np.asarray(value).astype(
-                expected_type, casting='same_kind'
+            # the field type and cast and assign the value if OK.
+            self.data[name] = _convert_types(
+                self.data_dictionary[name].field_type, value, 'data', name
             )
         elif name in self.metadata:
             # Check that the type of the assigned value can be safely cast to
-            # the field type. (Metadata fields are single values, so we convert to a
-            # 1-element array for the type check and casting.)
-            expected_type = self.data_dictionary[name].field_type
-            arr = np.asarray(value)
-            if not np.can_cast(arr, expected_type, casting='same_kind'):
-                raise TypeError(
-                    f'Cannot cast assigned value of type {type(value)} '
-                    f'to expected type {expected_type} for metadata field {name}'
-                )
-
-            # Cast and assign the value.
-            self.metadata[name] = arr.astype(expected_type, casting='same_kind').item()
+            # the field type and cast and assign the value if OK.
+            self.metadata[name] = _convert_types(
+                self.data_dictionary[name].field_type, value, 'metadata', name
+            )
         else:
             raise ValueError(f"'Trajectory' object has no attribute '{name}'")
 
@@ -247,7 +231,7 @@ class Trajectory:
 
         # Adjust the trajectory to include the new fields.
         self.fieldsets.add(fs.name)
-        self.data_dictionary = self.data_dictionary.merge(fieldset)
+        self.data_dictionary = self.data_dictionary.merge(fs)
 
         # Add data and metadata fields and set values from the `HasFieldSet`
         # object if there is one.
@@ -255,26 +239,63 @@ class Trajectory:
             if metadata.metadata:
                 if try_data:
                     if hasattr(fieldset, name):
-                        value = getattr(fieldset, name)
-                        if (
-                            not isinstance(value, metadata.field_type)
-                            and value is not None
-                        ):
-                            raise TypeError(
-                                f'Expected type {metadata.field_type} '
-                                f'for metadata field {name}'
-                            )
-                        self.metadata[name] = value
+                        # Check that the type of the assigned value can be
+                        # safely cast to the field type and cast and assign the
+                        # value if OK.
+                        self.metadata[name] = _convert_types(
+                            metadata.field_type,
+                            getattr(fieldset, name),
+                            'metadata',
+                            name,
+                        )
                         continue
                 self.metadata[name] = None
             else:
                 if try_data:
                     if hasattr(fieldset, name):
                         value = getattr(fieldset, name)
+
+                        # The number of points in a trajectory is currently
+                        # fixed at creation time.
                         if len(value) != self.npoints:
                             raise ValueError(
                                 'Assigned length does not match number of points'
                             )
-                        self.data[name] = np.asarray(value, dtype=float)
+
+                        # Check that the type of the assigned value can be
+                        # safely cast to the field type and cast and assign the
+                        # value if OK.
+                        self.data[name] = _convert_types(
+                            metadata.field_type, value, 'data', name
+                        )
                         continue
                 self.data[name] = np.zeros((self.npoints,), dtype=metadata.field_type)
+
+
+def _convert_types(expected_type: type, value: Any, label: str, name: str) -> Any:
+    """Check that the type of the assigned value can be safely cast to the
+    expected type and return the cast value.
+
+    (Metadata fields are single values, so we convert to a 1-element array for
+    the type check and casting.)
+    """
+
+    arr = value
+    wrapped = False
+    if not isinstance(value, np.ndarray):
+        arr = np.asarray(value)
+        wrapped = True
+
+    # Check that the type of the assigned value can be safely cast to
+    # the field type.
+    if not np.can_cast(arr, expected_type, casting='same_kind'):
+        raise TypeError(
+            f'Cannot cast assigned value of type {type(value)} '
+            f'to expected type {expected_type} for {label} field {name}'
+        )
+
+    # Return cast value.
+    cast_value = np.asarray(arr).astype(expected_type, casting='same_kind')
+    if wrapped:
+        cast_value = cast_value.item()
+    return cast_value

@@ -11,25 +11,68 @@ from netCDF4 import Dataset, Dimension, Group, VLType
 from .field_sets import FieldSet
 from .trajectory import BASE_FIELDSET_NAME, Trajectory
 
+# Python doesn't have a simple way of saying "anything that's acceptable as a
+# filesystem path", so define a simple type alias instead.
+
+PathType = str | Path
+
+
+AssociatedFileCreate = tuple[PathType, list[str]]
+AssociatedFileOpen = PathType
+AssociatedFiles = list[AssociatedFileCreate] | list[AssociatedFileOpen]
+
 
 class _TrajectoryStoreIterator(Iterator):
     """Private iterator class for TrajectoryStore."""
 
-    def __init__(self, set):
-        self._set = set
+    def __init__(self, store):
+        self._store = store
         self._index = 0
 
     def __next__(self):
-        if self._index < len(self._set):
-            item = self._set[self._index]
+        if self._index < len(self._store):
+            item = self._store[self._index]
             self._index += 1
             return item
         else:
             raise StopIteration
 
 
+class TrajectoryCache(LRUCache[int, Trajectory]):
+    """Specialization of LRUCache class for trajectory storage.
+
+    This is used to handle the case of in-memory trajectory stores that are not
+    connected to a NetCDF file: in that case, we want to prevent evictions from
+    the trajectory cache, since there is no file to which we can save evicted
+    items. Instead, we just throw an exception if the trajectory cache would
+    exceed its assigned size.
+    """
+
+    class EvictionOccurred(RuntimeError):
+        """Exception raised when an eviction occurs in the trajectory cache."""
+
+        pass
+
+    def __init__(self, *args, **kwargs):
+        """Initialize a trajectory cache with LRU eviction."""
+        super().__init__(*args, **kwargs)
+        self.exception_on_eviction = False
+
+    def popitem(self):
+        """Pop item from cache and return it."""
+        if self.exception_on_eviction:
+            raise self.EvictionOccurred()
+        key, value = super().popitem()
+        return key, value
+
+
 class TrajectoryStore:
-    """Class representing a set of trajectories stored in NetCDF files."""
+    """Class representing a set of trajectories stored in NetCDF files.
+
+    This is a complicated and flexible class that needs a big documentation
+    comment here.
+    TODO: Write it!
+    """
 
     class FileMode(str, Enum):
         READ = 'r'
@@ -38,6 +81,9 @@ class TrajectoryStore:
 
     @dataclass
     class NcFile:
+        """Internal class used to store information about NetCDF files
+        associated with a TrajectoryStore."""
+
         path: Path
         fieldsets: set[str]
         dataset: Dataset
@@ -70,10 +116,9 @@ class TrajectoryStore:
         /,
         nc_file: str | None = None,
         mode: FileMode = FileMode.READ,
-        fieldsets: list[str] | None = None,
         override: bool | None = None,
         cache_size_mb: int = 2048,
-        associated_nc_files: list[str] | list[tuple[str, list[str]]] | None = None,
+        associated_nc_files: AssociatedFiles | None = None,
         title: str | None = None,
         comment: str | None = None,
         history: str | None = None,
@@ -92,14 +137,10 @@ class TrajectoryStore:
             - APPEND: Open an existing NetCDF file for appending new
                 trajectories.
             Default is READ.
-        fieldsets : list[str] | None, optional
-            List of names of FieldSets to load from the base or associated
-            NetCDF files in READ mode. If None, all FieldSets found in the file
-            will be loaded.
         override : bool | None, optional
             If True in READ mode, FieldSets from associated files will override
             any FieldSets of the same name in the base file. Default is False.
-        associated_nc_files : list[str] | list[tuple[str, list[str]]] | None
+        associated_nc_files : list[PathType] | list[tuple[PathType, list[str]]] | None
             Paths to associated NetCDF files containing additional data or
             metadata fields. Each associated file may be specified as a string
             path or as a tuple of the form (path, [fieldset_names]) where
@@ -120,9 +161,6 @@ class TrajectoryStore:
             If input arguments are inconsistent with the specified file mode.
 
         """
-        # TODO: Allow nc_file=None in READ mode to create an empty
-        # TrajectoryStore?
-
         self.mode = mode
 
         # Check input arguments based on file mode.
@@ -147,19 +185,16 @@ class TrajectoryStore:
         if source is not None:
             self.global_attributes['source'] = source
 
+        # Setting nc_file=None in CREATE mode creates an empty TrajectoryStore.
+        # We can switch to a file-backed store later using the save method, but
+        # in the meantime, the trajectory cache is limited in size and cannot
+        # evict any items. Adding too many trajectories to an in-memory
+        # TrajectoryStore will result in a TrajectoryCache.EvictionOccurred
+        # exception.
         nc_file_req = mode != self.FileMode.CREATE
         if nc_file is None and nc_file_req:
             raise ValueError(f'nc_file required in file mode {mode}')
         self.nc_file = nc_file
-
-        fieldsets_ok = mode == self.FileMode.READ
-        if fieldsets is not None and not fieldsets_ok:
-            raise ValueError('fieldsets may only be specified in READ mode')
-        self.fieldsets = fieldsets or []
-        if fieldsets is not None:
-            raise NotImplementedError(
-                'TrajectoryStore.__init__: fieldsets not yet implemented'
-            )
 
         override_ok = mode == self.FileMode.READ
         if override is not None and not override_ok:
@@ -169,38 +204,49 @@ class TrajectoryStore:
             raise NotImplementedError(
                 'TrajectoryStore.__init__: override not yet implemented'
             )
+        # TODO: Implement field set override behavior.
 
         if associated_nc_files is None:
             associated_nc_files = []
         if mode in (self.FileMode.APPEND, self.FileMode.READ):
-            if any(not isinstance(f, str) for f in associated_nc_files):
+            if any(not isinstance(f, PathType) for f in associated_nc_files):
                 raise ValueError(
-                    'associated_nc_files must be str paths in APPEND and READ modes'
+                    'associated_nc_files must be paths in APPEND and READ modes'
                 )
         if mode == self.FileMode.CREATE:
             if any(not valid_associated_file_tuple(f) for f in associated_nc_files):
                 raise ValueError(
-                    'associated_nc_files must be tuple[str, list[str]] in CREATE mode'
+                    'associated_nc_files must be '
+                    'tuple[PathType, list[str]] in CREATE mode'
                 )
         self.associated_nc_files = associated_nc_files
         self.associated_fieldsets: set[str] = set()
         if mode == self.FileMode.CREATE:
-            self.associated_fieldsets = set(
-                f for t in associated_nc_files for f in t[1]
-            )
-        if len(associated_nc_files) > 0:
-            raise NotImplementedError(
-                'TrajectoryStore.__init__: associated_nc_files not yet implemented'
-            )
+            # This is slightly unwieldy because of Python's restrictions on
+            # using isinstance with parameterized generics.
+            assert isinstance(associated_nc_files, list)
+            self.associated_fieldsets = set()
+            for t in associated_nc_files:
+                assert isinstance(t, tuple)
+                for f in t[1]:
+                    self.associated_fieldsets.add(f)
 
         # Trajectories are stored as an LRU cache indexed by the index of the
         # trajectory. (This is done to handle cases where the trajectory store
         # is very large and cannot be held in memory all at once.)
-        self._trajectories = LRUCache[int, Trajectory](
+        #
+        # A store created with nc_file=None is in-memory only. We can switch to
+        # a file-backed store using the save method, but in the meantime, the
+        # trajectory cache cannot evict any entries. The custom TrajectoryCache
+        # class has a flag to raise an exception on eviction for this use case.
+        # TODO: THIS IS NOT THREAD-SAFE! ADD NECESSARY LOCKING.
+        self._trajectories = TrajectoryCache(
             cache_size_mb * 1024 * 1024,
             # TODO: CHECK THIS
             getsizeof=lambda t: t.nbytes,  # type: ignore
         )
+        if self.nc_file is None:
+            self._trajectories.exception_on_eviction = True
 
         # List of NetCDF file information structures and mapping from field set
         # names to NetCDF file information. The first entry in self._nc_files is
@@ -215,7 +261,8 @@ class TrajectoryStore:
         self._file_creation_pending = mode == self.FileMode.CREATE
 
         # Next trajectory index to assign. This is the length of the trajectory
-        # dimension.
+        # dimension. It gets set to the correct value for APPEND mode when we
+        # open the existing file.
         self._next_index = 0
 
         # Whether writing is enabled (CREATE or APPEND mode).
@@ -225,15 +272,38 @@ class TrajectoryStore:
         if mode in (self.FileMode.READ, self.FileMode.APPEND):
             self._open()
 
+    @classmethod
+    def create(cls, *args, **kwargs) -> 'TrajectoryStore':
+        """Create a new TrajectoryStore."""
+        return cls(mode=TrajectoryStore.FileMode.CREATE, *args, **kwargs)
+
+    @classmethod
+    def open(cls, *args, **kwargs) -> 'TrajectoryStore':
+        """Open an existing TrajectoryStore read-only."""
+        return cls(mode=TrajectoryStore.FileMode.READ, *args, **kwargs)
+
+    @classmethod
+    def append(cls, *args, **kwargs) -> 'TrajectoryStore':
+        """Open an existing TrajectoryStore for appending."""
+        return cls(mode=TrajectoryStore.FileMode.APPEND, *args, **kwargs)
+
     @property
     def files(self) -> list[NcFile]:
-        """NetCDF file information associated with the trajectory store."""
+        """NetCDF file information associated with the trajectory store.
+
+        The base NetCDF file is the first entry in the list; any associated
+        files follow.
+        """
         return self._nc_files
 
     def save(self, nc_file: str):
         """Create a NetCDF files for a TrajectoryStore currently not linked to
         one."""
-        ...
+        raise NotImplementedError('TrajectoryStore.save not yet implemented')
+
+        # Once the files have been created successfully and the existing data
+        # persisted, we can allow evictions from the trajectory cache.
+        self._trajectories.exception_on_eviction = False
 
     def create_associated(self, nc_file: str, fieldsets: list[str]):
         """Create an associated NetCDF file for additional field sets."""
@@ -244,17 +314,23 @@ class TrajectoryStore:
 
     @property
     def nc_linked(self) -> bool:
+        """Is a NetCDF file (or files) associated with the trajectory store?"""
         return len(self._nc_files) != 0
 
     def close(self):
-        """Close any open NetCDF file associated with the trajectory store."""
+        """Close any open NetCDF files associated with the trajectory store."""
         for nc in self._nc_files:
             nc.dataset.close()
         self._nc.clear()
         self._nc_files.clear()
 
     def sync(self):
-        """Synchronize any pending writes to the NetCDF file or files."""
+        """Synchronize any pending writes to the NetCDF file or files.
+
+        Note that this does not necessarily make the NetCDF files readable by
+        another application because of NetCDF4's finalization behavior. To
+        ensure complete finalization, call close() instead.
+        """
         for nc in self._nc_files:
             nc.dataset.sync()
 
@@ -268,13 +344,14 @@ class TrajectoryStore:
         """Retrieve a trajectory by numeric index (in order of addition)."""
         if idx in self._trajectories:
             return self._trajectories[idx]
-        if not self.nc_linked:
+        if self.nc_linked:
+            self._load_trajectory(idx)
+        if idx not in self._trajectories:
             raise IndexError('Trajectory index out of range')
-        self._load_trajectory(idx)
         return self._trajectories[idx]
 
     def __iter__(self) -> Iterator[Trajectory]:
-        """Iterator over trajectories in store."""
+        """Iterator over trajectories in store in index order."""
         return _TrajectoryStoreIterator(self)
 
     def add(self, trajectory: Trajectory) -> int:
@@ -388,12 +465,6 @@ class TrajectoryStore:
         may be stored in each NetCDF file.
         """
 
-        # Base file:
-        # 1.5. Retrieve groups and set up field set for each.
-        # 1.5.1. Retrieve data variables within group.
-        # 1.5.2. Retrieve metadata variables within group.
-        # 1.6. Return file information.
-
         # Open the NetCDF4 dataset from base file.
         assert self.nc_file is not None
         base_nc_file = self._open_nc_file(self.nc_file)
@@ -428,37 +499,32 @@ class TrajectoryStore:
             # relevant NetCDF group and that they have the right types and
             # shapes.
             if hash(fs) != hash(netcdf_fs):
-                print('Registry:', fs.fields, hash(fs))
-                print('File:', netcdf_fs.fields, hash(netcdf_fs))
                 raise ValueError(
                     f'FieldSet with name "{fs_name}" in base NetCDF file is '
                     f'incompatible with FieldSet in registry'
                 )
-
-        # Determine the field sets stored in the base NetCDF file (those not in
-        # associated files).
-        # base_nc_fieldsets = proto.fieldsets - self.associated_fieldsets
 
         # Save file information under fieldset names in _nc dictionary.
         self._nc_files.append(base_nc_file)
         for fs_name in base_nc_file.fieldsets:
             self._nc[fs_name] = base_nc_file
 
-        # TODO: Associated files.
-        # 2. Open any associated NetCDF files - for each associated file:
-        # 2.1. Ensure file exists.
-        # 2.2. Open NetCDF4 dataset.
-        # 2.3. Retrieve trajectory dimension.
-        # 2.4. Retrieve global attributes.
-        # 2.4.1. Retrieve title, name, description, created.
-        # 2.4.2. Retrieve fieldset_names and fieldset_hashes attributes.
-        # 2.4.3. Retrieve id_hash attribute.
-        # 2.4.4. Retrieve associated_name attribute.
-        # 2.4.5. Retrieve associated_hash attribute.
-        # 2.5. Retrieve groups and check for each field set.
-        # 2.5.1. Check data variables within group.
-        # 2.5.2. Check metadata variables within group.
-        # 2.6. Save file information under fieldset names in _nc dictionary.
+        # Set the next trajectory index for APPEND mode.
+        if self.mode == self.FileMode.APPEND:
+            self._next_index = len(base_nc_file.traj_dim)
+
+        # Open any associated NetCDF files.
+        for name in self.associated_nc_files:
+            assert isinstance(name, PathType)
+            assocated_file = self._open_nc_file(name, check_associated=base_nc_file)
+            self._nc_files.append(assocated_file)
+            for fs_name in assocated_file.fieldsets:
+                if fs_name in self._nc:
+                    raise ValueError(
+                        f'FieldSet with name "{fs_name}" found in associated '
+                        f'NetCDF file "{name}" already exists in base file'
+                    )
+                self._nc[fs_name] = assocated_file
 
     def _create(self):
         """Create a new NetCDF file (or files) for writing trajectories.
@@ -467,11 +533,8 @@ class TrajectoryStore:
         may be stored in each NetCDF file.
 
         This function is only called once the first trajectory is added to the
-        store.
+        store because we need to know what field sets are being stored.
         """
-
-        # TODO: Most of this can only be done once a trajectory is added, so
-        # that we know what field sets are involved.
 
         # We cannot create the NetCDF file until we know what field sets are
         # involved. For that we need at least one trajectory.
@@ -487,36 +550,34 @@ class TrajectoryStore:
 
         # Create the base NetCDF file.
         assert self.nc_file is not None
-        # TODO: Add global attributes.
         self._create_nc_file(self.nc_file, base_nc_fieldsets)
 
-        # TODO: Associated files.
-        # 2. Create any associated NetCDF files - for each associated file:
-        # 2.1. Ensure output directory exists.
-        # 2.2. Ensure file does not already exist.
-        # 2.3. Create NetCDF4 dataset.
-        # 2.4. Create trajectory dimension.
-        # 2.5. Set up global attributes.
-        # 2.5.1. Set up title, name, description, created.
-        # 2.5.2. Set up fieldset_names and fieldset_hashes attributes.
-        # 2.5.3. Calculate and set id_hash attribute.
-        # 2.5.4. Set up associated_name attribute.
-        # 2.5.5. Set up associated_hash attribute.
-        # 2.6. Create groups for each field set.
-        # 2.6.1. Create data variables within group.
-        # 2.6.2. Create metadata variables within group.
-        # 2.7. Save file information under fieldset names in _nc dictionary.
+        # Create the associated NetCDF files.
+        base_nc_file = self._nc[BASE_FIELDSET_NAME]
+        for associated_file in self.associated_nc_files:
+            # Another case of clumsy typing due to Python's restrictions on
+            # isinstance.
+            assert isinstance(associated_file, tuple)
+            nc_file, fieldsets = associated_file
+            self._create_nc_file(
+                nc_file,
+                set(fieldsets),
+                associated_name=base_nc_file.path,
+                associated_hash=base_nc_file.dataset.id_hash,
+            )
 
-    def _open_nc_file(self, nc_file: str | Path) -> 'TrajectoryStore.NcFile':
+    def _open_nc_file(
+        self,
+        nc_file: PathType,
+        check_associated: 'TrajectoryStore.NcFile | None' = None,
+    ) -> 'TrajectoryStore.NcFile':
         # Ensure input file exists.
         nc_file = Path(nc_file).resolve()
         if not nc_file.exists():
             raise ValueError(f'Input file {nc_file} does not exist')
 
-        # Open NetCDF4 dataset in read mode.
-        # TODO: Append mode? Does this need anything more here than using
-        # mode='a' and setting _write_enabled?
-        dataset = Dataset(nc_file, mode='r')
+        # Open NetCDF4 dataset in read or append mode.
+        dataset = Dataset(nc_file, mode='r' if self.mode == self.FileMode.READ else 'a')
 
         # Retrieve trajectory dimension.
         traj_dim = dataset.dimensions['trajectory']
@@ -531,19 +592,57 @@ class TrajectoryStore:
         if created_str is not None:
             created = datetime.fromisoformat(created_str)
 
-        # TODO: Do we need to do something with the following? Definitely the
-        # associated_... when we get to that. But what about the others?
-        #  - Retrieve fieldset_names and fieldset_hashes attributes.
-        #  - Retrieve id_hash attribute.
-        #  - Retrieve associated_name attribute.
-        #  - Retrieve associated_hash attribute.
+        # Retrieve additional global attributes for consistency checking.
+        fieldset_names = dataset.fieldset_names
+        if isinstance(fieldset_names, str):
+            fieldset_names = [fieldset_names]
+        fieldset_hashes = dataset.fieldset_hashes
+        if isinstance(fieldset_hashes, str):
+            fieldset_hashes = [fieldset_hashes]
+        id_hash = dataset.id_hash
+        associated_name = getattr(dataset, 'associated_name', None)
+        associated_hash = getattr(dataset, 'associated_hash', None)
 
         # Retrieve groups for each field set.
         groups = dataset.groups
 
+        # Check consistency.
+        if set(groups.keys()) != set(fieldset_names):
+            raise ValueError(
+                f'Field set names in global attribute do not match NetCDF groups '
+                f'in file {nc_file}'
+            )
+        for fs_name, fs_hash in zip(fieldset_names, fieldset_hashes):
+            fs = FieldSet.from_registry(fs_name)
+            # TODO: Add force option to make this into a warning instead of
+            # error.
+            if fs.digest != fs_hash:
+                raise ValueError(
+                    f'Field set hash for field set "{fs_name}" in file {nc_file} '
+                    f'does not match hash of FieldSet in registry'
+                )
+        m = hashlib.md5()
+        for h in fieldset_hashes:
+            m.update(h.encode('utf-8'))
+        if id_hash != m.hexdigest():
+            raise ValueError(
+                f'id_hash in NetCDF file {nc_file} does not match calculated '
+                f'hash from field set hashes'
+            )
+        if check_associated is not None:
+            if associated_name is None or associated_hash is None:
+                raise ValueError(
+                    f'Associated file attributes missing from NetCDF file {nc_file}'
+                )
+            if associated_hash != check_associated.dataset.id_hash:
+                raise ValueError(
+                    f'Associated file hash in NetCDF file {nc_file} does not match '
+                    f'hash of base file {check_associated.path}'
+                )
+
         return TrajectoryStore.NcFile(
             path=nc_file,
-            fieldsets=set(groups.keys()),
+            fieldsets=set(fieldset_names),
             dataset=dataset,
             traj_dim=traj_dim,
             groups=groups,
@@ -554,7 +653,13 @@ class TrajectoryStore:
             created=created,
         )
 
-    def _create_nc_file(self, nc_file: str | Path, fieldsets: set[str]) -> None:
+    def _create_nc_file(
+        self,
+        nc_file: str | Path,
+        fieldsets: set[str],
+        associated_name: Path | None = None,
+        associated_hash: str | None = None,
+    ) -> None:
         # Ensure output directory exists.
         nc_file = Path(nc_file).resolve()
         if not nc_file.parent.exists():
@@ -573,10 +678,14 @@ class TrajectoryStore:
 
         # Set up basic global attributes.
         if len(self.global_attributes) > 0:
-            dataset.title = self.global_attributes.get('title', '')
-            dataset.comment = self.global_attributes.get('comment', '')
-            dataset.history = self.global_attributes.get('history', '')
-            dataset.source = self.global_attributes.get('source', '')
+            if 'title' in self.global_attributes:
+                dataset.title = self.global_attributes['title']
+            if 'comment' in self.global_attributes:
+                dataset.comment = self.global_attributes['comment']
+            if 'history' in self.global_attributes:
+                dataset.history = self.global_attributes['history']
+            if 'source' in self.global_attributes:
+                dataset.source = self.global_attributes['source']
 
         # Set up creation time global attribute.
         self.global_attributes['created'] = datetime.now(UTC).astimezone().isoformat()
@@ -597,6 +706,12 @@ class TrajectoryStore:
         for h in fs_hashes:
             m.update(h.encode('utf-8'))
         dataset.id_hash = m.hexdigest()
+
+        # Set up associated file attributes, if applicable.
+        if associated_name is not None:
+            dataset.associated_name = str(associated_name)
+        if associated_hash is not None:
+            dataset.associated_hash = associated_hash
 
         # Each named field set gets its own group in the NetCDF file.
         groups = {}
@@ -661,10 +776,10 @@ class TrajectoryStore:
         # Save information about file for lookup by field set name. This is how
         # we find the file and group for a given field set later on.
         #
-        # QUESTION: How do we get from a variable (attribute) name to its field
-        # set? I guess we look it up in the trajectory's data dictionary,
-        # getting a FieldSet and the name of the FieldSet is the name of the
-        # NetCDF group where we find the variable.
+        # To get from a variable (attribute) name to its field set, we look it
+        # up in the trajectory's data dictionary, getting a FieldSet: the name
+        # of the FieldSet is the name of the NetCDF group where we find the
+        # variable.
         file_info = self.NcFile(
             path=nc_file,
             fieldsets=fieldsets,
@@ -681,7 +796,7 @@ def valid_associated_file_tuple(t) -> bool:
     """Check if t is a tuple[str, list[str]]."""
     if not isinstance(t, tuple) or len(t) != 2:
         return False
-    if not isinstance(t[0], str) or not isinstance(t[1], list):
+    if not isinstance(t[0], PathType) or not isinstance(t[1], list):
         return False
     if any(not isinstance(name, str) for name in t[1]):
         return False
