@@ -98,7 +98,7 @@ class GroundTrack:
         # Boundary cases.
         if pos == 0:
             return GroundTrack.Point(self.waypoints[0], self.azimuths[0])
-        if pos == len(self.index) - 1:
+        if distance >= self.index[-1]:
             return GroundTrack.Point(self.waypoints[-1], self.azimuths[-1])
 
         # Interpolate along a great circle from the first point in the adjacent
