@@ -1,6 +1,7 @@
 import tomllib
 
 import numpy as np
+import pytest
 
 import AEIC.trajectories.builders as tb
 from AEIC.missions import Mission
@@ -45,3 +46,53 @@ def test_trajectory_simulation_1(tmp_path):
     ts_loaded = TrajectoryStore.open(base_file=fname)
     assert len(ts_loaded) == len(ts)
     # TODO: Test that additional fields are correctly saved and loaded.
+
+
+def test_trajectory_mass_iter():
+    """Test that:
+    - Mass iteration is consistent between start and end of mission
+    - The final mass residual is less than required for convergence
+    - In case without enough iterations to meet reltol, error is raised
+    """
+    test_reltol = 1e-6
+    test_maxiters = 1000
+
+    test_mis = Mission(
+        origin='BOS',
+        destination='LAX',
+        departure="2019-01-01T12:00:00",
+        arrival="2019-01-01T18:00:00",
+        aircraft_type="738",
+        load_factor=1.0,
+    )
+
+    perf = PerformanceModel(file_location('IO/default_config.toml'))
+
+    builder_wout_iter = tb.LegacyBuilder(options=tb.Options(iterate_mass=False))
+
+    builder_with_iter = tb.LegacyBuilder(
+        options=tb.Options(
+            iterate_mass=True,
+            max_mass_iters=test_maxiters,
+            mass_iter_reltol=test_reltol,
+        )
+    )
+
+    builder_fail = tb.LegacyBuilder(
+        options=tb.Options(
+            iterate_mass=True, max_mass_iters=1, mass_iter_reltol=test_reltol
+        )
+    )
+
+    traj_wout_iter = builder_wout_iter.fly(perf, test_mis)
+    traj_with_iter = builder_with_iter.fly(perf, test_mis)
+
+    fuel_difference = traj_wout_iter.fuel_mass[0] - traj_with_iter.fuel_mass[0]
+    mass_difference = traj_wout_iter.aircraft_mass[0] - traj_with_iter.aircraft_mass[0]
+    final_mass_residual = traj_with_iter.fuel_mass[-1] / traj_with_iter.fuel_mass[0]
+
+    assert mass_difference == pytest.approx(fuel_difference)
+    assert final_mass_residual < test_reltol
+
+    with pytest.raises(RuntimeError):
+        builder_fail.fly(perf, test_mis)

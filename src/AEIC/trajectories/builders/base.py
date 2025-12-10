@@ -275,12 +275,13 @@ class Builder(ABC):
                 break
 
             # Perform a "dumb" correction of the starting mass.
-            self.starting_mass = self.starting_mass - (mass_res * self.total_fuel_mass)
+            self.starting_mass -= mass_res * self.total_fuel_mass
+            self.total_fuel_mass -= mass_res * self.total_fuel_mass
 
         if not mass_converged:
             raise RuntimeError(
-                "Mass iteration failed to converge; final residual"
-                f"{mass_res * 100}% > {self.options.mass_iter_reltol * 100}%"
+                "Mass iteration failed to converge; final residual "
+                f"{mass_res:.2e} > {self.options.mass_iter_reltol:.2e}"
             )
 
     def _fly_iteration(self, traj: Trajectory, **kwargs):
