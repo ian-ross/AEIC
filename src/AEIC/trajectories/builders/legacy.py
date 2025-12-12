@@ -6,7 +6,6 @@ from numpy.typing import NDArray
 from AEIC.missions import Mission
 from AEIC.performance_model import PerformanceModel
 from AEIC.trajectories import FlightPhase, GroundTrack, Trajectory
-from AEIC.utils.files import file_location
 from AEIC.utils.helpers import filter_order_duplicates
 from AEIC.utils.units import (
     FEET_TO_METERS,
@@ -48,7 +47,6 @@ class LegacyContext(Context):
     ):
         # The context constructor calculates all of the fixed information used
         # throughout the simulation by the trajectory builder.
-        self.options = builder.options
 
         # Number of points in different flight phases.
         n_climb = int(1 / builder.pct_step_clm + 1)
@@ -116,16 +114,8 @@ class LegacyContext(Context):
 
         # Initialize weather regridding when requested.
         self.weather: Weather | None = None
-        if self.options.use_weather:
-            mission_date = mission.departure.strftime('%Y%m%d')
-            weather_path = file_location(
-                f"{ac_performance.config.weather_data_dir}/{mission_date}.nc"
-            )
-            self.weather = Weather(
-                weather_data_path=weather_path,
-                mission=mission,
-                ground_track=ground_track,
-            )
+        if builder.options.use_weather:
+            self.weather = Weather(data_dir=ac_performance.config.weather_data_dir)
 
         # Pass information to base context class constructor.
         super().__init__(
@@ -370,7 +360,8 @@ class LegacyBuilder(Builder):
             segment_fuel = ff * segment_time
             if self.weather is not None:
                 traj.ground_speed[i] = self.weather.get_ground_speed(
-                    ground_distance=traj.ground_distance[i],
+                    time=self.mission.departure,
+                    gt_point=self.ground_track.location(traj.ground_distance[i]),
                     altitude=traj.altitude[i],
                     true_airspeed=fwd_tas,
                     azimuth=traj.azimuth[i],
@@ -474,7 +465,8 @@ class LegacyBuilder(Builder):
         for i in range(self.n_climb, self.n_climb + self.n_cruise - 1):
             if self.weather is not None:
                 traj.ground_speed[i] = self.weather.get_ground_speed(
-                    ground_distance=traj.ground_distance[i],
+                    time=self.mission.departure,
+                    gt_point=self.ground_track.location(traj.ground_distance[i]),
                     altitude=traj.altitude[i],
                     true_airspeed=traj.true_airspeed[i],
                     azimuth=traj.azimuth[i],
@@ -582,7 +574,8 @@ class LegacyBuilder(Builder):
 
             if self.weather is not None:
                 traj.ground_speed[i] = self.weather.get_ground_speed(
-                    ground_distance=traj.ground_distance[i],
+                    time=self.mission.departure,
+                    gt_point=self.ground_track.location(traj.ground_distance[i]),
                     altitude=traj.altitude[i],
                     true_airspeed=fwd_tas,
                     azimuth=traj.azimuth[i],
