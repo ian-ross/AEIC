@@ -1,0 +1,58 @@
+performance_model = "performance/sample_performance_model.toml"
+
+lto_input_mode = "EDB"  # "performance_model" : LTO data provided in PerformanceModel file
+                        # "EDB" : Use EDB data to get LTO performance
+edb_input_file = "engines/sample_edb.xlsx"
+
+
+[weather]
+use_weather = true                  # Use loaded weather to calculate wind vectors
+weather_data_dir = "weather"
+                                    # Location on weather data
+                                    # files should be in YYYYMMDD.nc format
+
+[emissions]
+fuel = "conventional_jetA"  # Fuel files stored in data/fuels/
+                            # Current options include:
+                            # conventional_jetA
+
+co2_enabled = true          # Compute CO2 emissions with EI in fuels file
+
+h2o_enabled = true          # Compute H2O emissions with EI in fuels file
+
+sox_enabled = true          # Compute SOx emissions with EI in fuels file
+
+nox_method = "BFFM2"        # Options include
+                            # P3T3: Pt3, Tt3 method
+                            # BFFM2: Boeing Fuel flow method 2
+                            # None: Do not compute NOx emissions
+
+hc_method = "BFFM2"         # Options include
+                            # BFFM2: Boeing Fuel flow method 2
+                            # None: Do not compute HC emissions
+
+co_method = "BFFM2"         # Options include
+                            # BFFM2: Boeing Fuel flow method 2
+                            # None: Do not compute CO emissions
+
+pmvol_method = "fuel_flow"
+                            # Options include
+                            # fuel_flow: Calculate EI(PMvolo) and OCicEI based on fuel flow
+                            # FOA3: Using the FOA3.0 method (Wayson et al., 2009)
+                            # None: Do not compute PMvol emissions
+
+pmnvol_method = "MEEM"      # Options include
+                            # MEEM: Mission Emissions Estimation Methodology (MEEM)
+                            #        based on Ahrens et al. (2022),
+                            #        SCOPE11, and the methodology of Peck et al. (2013).
+                            # SCOPE11: SCOPE11 methodology
+                            # None: Do not compute PMnvol emissions
+
+climb_descent_usage = true  # true: emissions calculated for entire trajectory (takeoff, climb, cruise, descent)
+                            # false: emissions only calculated for cruise, LTO data used for takeoff, climb, approach
+
+apu_enabled = true          # Compute emissions from APU
+
+gse_enabled = true          # Compute emissions from GSE
+
+lifecycle_enabled = true    # Compute lifecycle emissions
