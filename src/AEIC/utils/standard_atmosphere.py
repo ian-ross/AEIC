@@ -1,8 +1,22 @@
+# TODO: Remove this when we migrate to Python 3.14+.
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import numpy as np
 from numpy.typing import NDArray
 
-from .consts import T0, R_air, beta_tropo, g0, h_p_tropo, p0
-from .types import FloatOrNDArray
+from AEIC.constants import T0, R_air, g0, p0
+
+if TYPE_CHECKING:
+    from AEIC.types import FloatOrNDArray
+
+
+# Tropospheric temperature lapse rate [K/m]
+beta_tropo = -0.0065  # (−6.5 K/km)
+
+# Pressure-based tropopause altitude [m]
+h_p_tropo = 11_000.0  # ISA tropopause altitude
 
 
 def temperature_at_altitude_isa_bada4(altitude: FloatOrNDArray) -> NDArray:
