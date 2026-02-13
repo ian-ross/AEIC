@@ -33,7 +33,7 @@ EOF
 
 BRANCH="release-$VERSION"
 
-git branch -m releast-tmp "$BRANCH"
+git branch -m release-tmp "$BRANCH"
 git push origin "$BRANCH"
 
 echo
