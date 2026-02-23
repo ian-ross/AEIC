@@ -173,7 +173,7 @@ class Trajectory(Container):
             raise ValueError(
                 'Trajectory must have a flight_time field for interpolation'
             )
-        orig_time = self._data['flight_time']
+        orig_time = self._data['flight_time'][: self._size]
 
         new_traj = Trajectory(len(new_time), fieldsets=list(self._fieldsets))
         for name, field in self._data_dictionary.items():
@@ -187,7 +187,7 @@ class Trajectory(Container):
                         new_species_values[sp] = np.interp(
                             new_time,
                             orig_time,
-                            self._data[name][sp],
+                            self._data[name][sp][: self._size],
                             left=np.nan,
                             right=np.nan,
                         )
@@ -197,7 +197,7 @@ class Trajectory(Container):
                     new_traj._data[name] = np.interp(
                         new_time,
                         orig_time,
-                        self._data[name],
+                        self._data[name][: self._size],
                         left=np.nan,
                         right=np.nan,
                     )
