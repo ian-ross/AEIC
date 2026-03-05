@@ -74,29 +74,29 @@ sets of fields.
 ```
 
 ```{eval-rst}
-.. autoclass:: AEIC.trajectories.field_sets.FieldMetadata
+.. autoclass:: AEIC.storage.field_sets.FieldMetadata
    :members:
 ```
 
 ```{eval-rst}
-.. autoclass:: AEIC.trajectories.field_sets.FieldSet
+.. autoclass:: AEIC.storage.field_sets.FieldSet
    :members:
 ```
 
 ```{eval-rst}
-.. autoenum:: AEIC.trajectories.dimensions.Dimension
+.. autoenum:: AEIC.storage.dimensions.Dimension
    :members:
 ```
 
 ```{eval-rst}
-.. autoclass:: AEIC.trajectories.dimensions.Dimensions
+.. autoclass:: AEIC.storage.dimensions.Dimensions
    :members:
 ```
 
 ## Flight phases
 
 ```{eval-rst}
-.. automodule:: AEIC.trajectories.phase
+.. automodule:: AEIC.storage.phase
    :members:
 ```
 

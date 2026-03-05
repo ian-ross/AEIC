@@ -26,6 +26,28 @@ performance model definition and returns an instance of the correct
 performance model class based on the `model_type` field. For the current
 legacy-based performance models, use `model_type = "legacy"`.
 
+## Mission-based performance model selection
+
+When simulating trajectories from multiple missions, it will often be the case
+the different performance models will be used for different missions,
+depending on the aircraft type (and possibly other missions parameters). To
+enable this, it is possible to pass a {py:class}`PerformanceModelSelector
+<AEIC.performance.model_selector.PerformanceModelSelector>` value instead of
+an individual performance model when simulating a trajectory. A performance
+model selector is essentially just a function from a {py:class}`Mission
+<AEIC.missions.Mission>` to a {py:class}`BasePerformanceModel
+<AEIC.performance.models.BasePerformanceModel>` and is called to determine the
+performance model to use for each mission.
+
+A simple performance model selector implementation is provided by the
+{py:class}`SimplPerformanceModelSelector
+<AEIC.performance.model_selector.SimplePerformanceModelSelector>` class. This
+class implements a simple mapping from aircraft type to performance model
+based on the contents of a directory that holds TOML performance model files
+with names based on the aircraft type along with a configuration file that
+defines a default performance model and synonyms for aircraft types without
+their own performance model files.
+
 ## Performance evaluation
 
 The fundamental operation of a performance model is to take an aircraft state,
@@ -123,6 +145,17 @@ After a performance model instance is created (of any type derived from
 .. autoclass:: AEIC.performance.models.PerformanceModel
    :members:
    :exclude-members: model_config
+```
+
+```{eval-rst}
+.. autoclass:: AEIC.performance.model_selector.PerformanceModelSelector
+   :members:
+```
+
+```{eval-rst}
+.. autoclass:: AEIC.performance.model_selector.SimplePerformanceModelSelector
+   :members:
+   :special-members: __init__, __call__
 ```
 
 ```{eval-rst}
