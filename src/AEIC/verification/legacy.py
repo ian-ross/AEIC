@@ -76,7 +76,14 @@ class LegacyTrajectory:
         retval.longitude = self.df.long.values
         retval.altitude = self.df.alt.values * FEET_TO_METERS
         retval.ground_distance = self.df.horDist.values * NAUTICAL_MILES_TO_METERS
-        retval.azimuth = self.df.az.values
+        # Correct weird jumps in MATLAB azimuth output.
+        tmp_azimuth = self.df.az.values
+        for i in range(1, len(tmp_azimuth)):
+            if tmp_azimuth[i] - tmp_azimuth[i - 1] > 180:
+                tmp_azimuth[i:] -= 180
+            elif tmp_azimuth[i - 1] - tmp_azimuth[i] > 180:
+                tmp_azimuth[i:] += 180
+        retval.azimuth = tmp_azimuth
         retval.true_airspeed = self.df.TAS.values
         retval.rate_of_climb = self.df.roc_fpm.values * FPM_TO_MPS
         retval.aircraft_mass = self.df.acMass.values
@@ -87,8 +94,6 @@ class LegacyTrajectory:
         emissions_indices[Species.HC] = self.df.EI_HC.values
         emissions_indices[Species.CO] = self.df.EI_CO.values
         emissions_indices[Species.NOx] = self.df.EI_NOx.values
-        emissions_indices[Species.PMnvol] = self.df.EI_PMnvol.values
-        emissions_indices[Species.PMvol] = self.df.EI_PMvol.values
         emissions_indices[Species.SOx] = self.df.EI_SOx.values
         retval.trajectory_indices = emissions_indices
 
