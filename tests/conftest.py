@@ -6,6 +6,7 @@ import pytest
 
 from AEIC.config import Config, config
 from AEIC.missions import Mission
+from AEIC.performance.model_selector import SimplePerformanceModelSelector
 from AEIC.performance.models import PerformanceModel
 from AEIC.types import Fuel
 
@@ -76,6 +77,13 @@ def sample_missions():
 def performance_model():
     return PerformanceModel.load(
         config.file_location('performance/sample_performance_model.toml')
+    )
+
+
+@pytest.fixture
+def performance_model_selector():
+    return SimplePerformanceModelSelector(
+        config.file_location('performance/simple_selector')
     )
 
 

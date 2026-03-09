@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from AEIC.missions import Mission
+from AEIC.performance.model_selector import PerformanceModelSelector
 from AEIC.performance.models import BasePerformanceModel
 from AEIC.storage import Container, FlightPhase
 from AEIC.units import METERS_TO_FL
@@ -135,7 +136,7 @@ class Builder(ABC):
 
     def fly(
         self,
-        ac_performance: BasePerformanceModel,
+        ac_performance: BasePerformanceModel | PerformanceModelSelector,
         mission: Mission,
         starting_mass: float | None = None,
         **kwargs,
@@ -167,6 +168,12 @@ class Builder(ABC):
         # wrapper here manages the lifetime of that context.
 
         try:
+            # If we have a performance model selector rather than an explicit
+            # performance model, look up the performance model to use based on
+            # the mission parameters.
+            if isinstance(ac_performance, PerformanceModelSelector):
+                ac_performance = ac_performance(mission)
+
             # Create simulation context. This is of a class derived from the
             # base Context class that depends on the exact trajectory builder
             # being used. Different trajectory builders will have different

@@ -136,3 +136,12 @@ def test_trajectory_mass_iter_fail(
 
     with pytest.raises(RuntimeError):
         builder_fail.fly(performance_model, example_mission)
+
+
+def test_trajectory_performance_model_selector(
+    performance_model_selector, sample_missions
+):
+    builder = tb.LegacyBuilder(options=tb.Options(iterate_mass=False))
+    for mis in sample_missions:
+        traj = builder.fly(performance_model_selector, mis)
+        assert len(traj) > 0
