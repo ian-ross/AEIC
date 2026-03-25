@@ -472,6 +472,10 @@ class TrajectoryStore:
         # closed.
         self._user_comments: list[str] = []
 
+        # Sampling information for reproducibility when sampling missions.
+        self._sample_fraction: float | None = None
+        self._sample_seed: int | None = None
+
         # Open an existing file or files.
         if mode in (self.FileMode.READ, self.FileMode.APPEND):
             try:
@@ -493,6 +497,12 @@ class TrajectoryStore:
         the NetCDF file when it's created by the `save` method.
         """
         self._user_comments.append(comment)
+
+    def set_sampling_info(self, sample: float | None = None, seed: int | None = None):
+        """Add sampling information for reproducibility when sampling
+        missions."""
+        self._sample_fraction = sample
+        self._sample_seed = seed
 
     @classmethod
     def create(cls, *args, **kwargs) -> TrajectoryStore:
@@ -689,7 +699,9 @@ class TrajectoryStore:
         # Save simulation reproducibility information.
         if self.mode == self.FileMode.CREATE:
             if self._reproducibility_data is None:
-                self._reproducibility_data = ReproducibilityData.build()
+                self._reproducibility_data = ReproducibilityData.build(
+                    self._sample_fraction, self._sample_seed
+                )
             for nc in self._nc_files:
                 for ds in nc.dataset:
                     _write_reproducibility_info(
@@ -2256,6 +2268,12 @@ def _write_reproducibility_info(
     g.variables['files_accessed'][...] = json.dumps([str(p) for p in repro.files])
     g.variables['config'][...] = repro.config
     g.variables['comments'][...] = json.dumps(comments)
+    if repro.sample_fraction is not None:
+        g.createVariable('sample_fraction', np.float64, ())
+        g.variables['sample_fraction'][...] = repro.sample_fraction
+    if repro.sample_seed is not None:
+        g.createVariable('sample_seed', np.int64, ())
+        g.variables['sample_seed'][...] = repro.sample_seed
 
 
 def _read_reproducibility_info(
@@ -2277,6 +2295,12 @@ def _read_reproducibility_info(
     with Config.escape():
         config = Config.model_validate_json(g.variables['config'][...])
     comments = json.loads(g.variables['comments'][...])
+    sample_fraction = None
+    if 'sample_fraction' in g.variables:
+        sample_fraction = g.variables['sample_fraction'][...]
+    sample_seed = None
+    if 'sample_seed' in g.variables:
+        sample_seed = g.variables['sample_seed'][...]
 
     repro_data = ReproducibilityData(
         python_version=python_version,
@@ -2286,6 +2310,8 @@ def _read_reproducibility_info(
         git_dirty=git_dirty,
         files=file_accessed,
         config=Config.model_dump_json(config),
+        sample_fraction=sample_fraction,
+        sample_seed=sample_seed,
     )
 
     return repro_data, comments
