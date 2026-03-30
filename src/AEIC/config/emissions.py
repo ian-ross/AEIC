@@ -18,20 +18,17 @@ class EINOxMethod(CIStrEnum):
     NONE = 'none'
 
 
-class PMvolMethod(CIStrEnum):
-    """PMvol emissions calculation methods."""
+class EIHCCOMethod(CIStrEnum):
+    """HC/CO emissions calculation methods."""
 
-    FUEL_FLOW = 'fuel_flow'
-    FOA3 = 'foa3'
+    BFFM2 = 'bffm2'
     NONE = 'none'
 
 
-class PMnvolMethod(CIStrEnum):
-    """PMnvol emissions calculation methods."""
+class EInvPMMethod(CIStrEnum):
+    """nvPM emissions calculation methods."""
 
     MEEM = 'meem'
-    SCOPE11 = 'scope11'
-    FOA3 = 'foa3'
     NONE = 'none'
 
 
@@ -53,8 +50,11 @@ class EmissionsConfig(CIBaseModel):
     model_config = ConfigDict(frozen=True)
     """Configuration is frozen after creation."""
 
-    DEFAULT_METHOD: ClassVar[EINOxMethod] = EINOxMethod.BFFM2
-    """Default method for NOₓ, HC, and CO emissions calculations."""
+    DEFAULT_METHOD_NOx: ClassVar[EINOxMethod] = EINOxMethod.BFFM2
+    """Default method for NOₓ emissions calculations."""
+
+    DEFAULT_METHOD_HCCO: ClassVar[EIHCCOMethod] = EIHCCOMethod.BFFM2
+    """Default method for HC, and CO emissions calculations."""
 
     fuel: str
     """Fuel used (conventional Jet-A, SAF, etc.). Should be the name of a file
@@ -80,22 +80,19 @@ class EmissionsConfig(CIBaseModel):
     sox_enabled: bool = True
     """Toggle fuel-dependency SOₓ (SO₂ and SO₄) emission calculation."""
 
-    # Emission calculation method options for all other emmisions
+    # Emission calculation method options for all other emissions.
 
-    nox_method: EINOxMethod = DEFAULT_METHOD
+    nox_method: EINOxMethod = DEFAULT_METHOD_NOx
     """NOₓ emission calculation method. ("None" disables NOₓ emissions.)"""
 
-    hc_method: EINOxMethod = DEFAULT_METHOD
+    hc_method: EIHCCOMethod = DEFAULT_METHOD_HCCO
     """HC emission calculation method. ("None" disables HC emissions.)"""
 
-    co_method: EINOxMethod = DEFAULT_METHOD
+    co_method: EIHCCOMethod = DEFAULT_METHOD_HCCO
     """CO emission calculation method. ("None" disables CO emissions.)"""
 
-    pmvol_method: PMvolMethod = PMvolMethod.FUEL_FLOW
-    """PMvol emission calculation method. ("None" disables PMvol emissions.)"""
-
-    pmnvol_method: PMnvolMethod = PMnvolMethod.MEEM
-    """PMnvol emission calculation method. ("None" disables PMnvol emissions.)"""
+    nvpm_method: EInvPMMethod = EInvPMMethod.MEEM
+    """nvPM emission calculation method. ("None" disables nvPM emissions.)"""
 
     # Non trajectory emission calculation flags.
 
@@ -125,22 +122,17 @@ class EmissionsConfig(CIBaseModel):
     @property
     def hc_enabled(self) -> bool:
         """HC emission calculation flag."""
-        return self.hc_method != EINOxMethod.NONE
+        return self.hc_method != EIHCCOMethod.NONE
 
     @property
     def co_enabled(self) -> bool:
         """CO emission calculation flag."""
-        return self.co_method != EINOxMethod.NONE
+        return self.co_method != EIHCCOMethod.NONE
 
     @property
-    def pmvol_enabled(self) -> bool:
-        """PMvol emission calculation flag."""
-        return self.pmvol_method != PMvolMethod.NONE
-
-    @property
-    def pmnvol_enabled(self) -> bool:
-        """PMnvol emission calculation flag."""
-        return self.pmnvol_method != PMnvolMethod.NONE
+    def nvpm_enabled(self) -> bool:
+        """nvPM emission calculation flag."""
+        return self.nvpm_method != EInvPMMethod.NONE
 
     @cached_property
     def enabled_species(self) -> set[Species]:
@@ -158,10 +150,7 @@ class EmissionsConfig(CIBaseModel):
         add(Species.HC)
         add(Species.CO)
         add(Species.NOx, Species.NO, Species.NO2, Species.HONO)
-        add(Species.PMvol, Species.OCic)
-        add(Species.PMnvol, Species.PMnvolGMD)
-        if self.pmnvol_method in (PMnvolMethod.SCOPE11, PMnvolMethod.MEEM):
-            add(Species.PMnvolN, label='pmnvol')
+        add(Species.nvPM, Species.nvPM_N, label='nvpm')
         add(Species.SOx, Species.SO2, Species.SO4)
 
         return result
