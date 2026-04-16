@@ -10,6 +10,7 @@ from typing import ClassVar, TypeVar, cast
 import pandas as pd
 
 from .filter import Filter
+from .mission import Mission
 
 T = TypeVar('T')
 
@@ -29,6 +30,9 @@ class QueryBase[T](ABC):
 
     RESULT_TYPE: ClassVar[type]
     """Result type returned by a given query class."""
+
+    RESULT_CONSTRUCTION_TYPE: ClassVar[type | None] = None
+    """Utility type used to create result values."""
 
     PROCESS_RESULT: ClassVar[Callable | None] = None
     """Special processing function for results, or None if not needed."""
@@ -80,60 +84,14 @@ class QueryBase[T](ABC):
 
 
 @dataclass
-class QueryResult:
+class QueryResult(Mission):
     """A single flight query result."""
 
-    departure: pd.Timestamp
-    """Flight departure timestamp (UTC)."""
-
-    arrival: pd.Timestamp
-    """Flight arrival timestamp (UTC)."""
-
-    carrier: str
-    """Airline (IATA code)."""
-
-    flight_number: str
-    """Flight number."""
-
-    origin: str
-    """Origin airport (IATA code)."""
-
-    origin_country: str
-    """Origin country (ISO 3166-1 alpha-2 code)."""
-
-    destination: str
-    """Destination airport (IATA code)."""
-
-    destination_country: str
-    """Destination country (ISO 3166-1 alpha-2 code)."""
-
-    service_type: str
-    """Service type (IATA single-letter code, documented `here
-    <https://knowledge.oag.com/v1/docs/iata-service-type-codes>`__)."""
-
-    aircraft_type: str
-    """Aircraft type (ICAO code)."""
-
-    engine_type: str | None
-    """Engine type, or None if not known."""
-
-    distance: int
-    """Flight distance in kilometers."""
-
-    seat_capacity: int
-    """Seat capacity."""
-
-    id: int
-    """Unique flight instance ID."""
-
-    flight_id: int
-    """Unique flight ID."""
-
     @classmethod
-    def from_row(cls, row: tuple) -> QueryResult:
+    def from_row(cls, row: tuple) -> Mission:
         """Create a QueryResult from a database row."""
 
-        return cls(
+        return Mission(
             departure=pd.Timestamp.fromtimestamp(row[0], 'UTC'),
             arrival=pd.Timestamp.fromtimestamp(row[1], 'UTC'),
             carrier=row[4],
@@ -145,15 +103,15 @@ class QueryResult:
             service_type=row[10],
             aircraft_type=row[11],
             engine_type=row[12],
-            distance=row[13],
             seat_capacity=row[14],
-            flight_id=row[3],
-            id=row[2],
+            flight_id=row[2],
+            # Placeholder value since load factor is not included in OAG data.
+            load_factor=1.0,
         )
 
 
 @dataclass
-class Query(QueryBase[QueryResult]):
+class Query(QueryBase[Mission]):
     """Query for scheduled flights."""
 
     every_nth: int | None = None
@@ -168,8 +126,11 @@ class Query(QueryBase[QueryResult]):
     offset: int | None = None
     """Number of results to skip before returning results."""
 
-    RESULT_TYPE = QueryResult
+    RESULT_TYPE = Mission
     """Result type returned by this query class."""
+
+    RESULT_CONSTRUCTION_TYPE = QueryResult
+    """Helper type used to create results."""
 
     def to_sql(self) -> tuple[str, list]:
         """Generate the SQL query string and parameters."""
