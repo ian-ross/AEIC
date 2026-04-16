@@ -1,0 +1,9 @@
+[longitude]
+resolution = 1.0
+
+[latitude]
+resolution = 1.0
+
+[altitude]
+mode = "isa_pressure"
+levels = [1000, 850, 700, 500, 300, 200, 100]

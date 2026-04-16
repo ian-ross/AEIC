@@ -134,8 +134,8 @@ class QueryResult:
         """Create a QueryResult from a database row."""
 
         return cls(
-            departure=pd.Timestamp.utcfromtimestamp(row[0]),
-            arrival=pd.Timestamp.utcfromtimestamp(row[1]),
+            departure=pd.Timestamp.fromtimestamp(row[0], 'UTC'),
+            arrival=pd.Timestamp.fromtimestamp(row[1], 'UTC'),
             carrier=row[4],
             flight_number=row[5],
             origin=row[6],
@@ -313,6 +313,40 @@ class CountQuery(QueryBase[int]):
         # Build the SQL query, shortcutting the common case of no conditions to
         # count all flight instances.
         sql = 'SELECT COUNT(s.id) FROM schedules s'
+        if len(self._conditions) > 0:
+            sql += (
+                ' JOIN flights f ON f.id = s.flight_id '
+                'JOIN airports ao ON f.origin = ao.id '
+                'JOIN airports ad ON f.destination = ad.id'
+                f'{self._where_clause()}'
+            )
+
+        return sql, self._params
+
+
+@dataclass
+class TimeRangeQuery(QueryBase[tuple[int | None, int | None]]):
+    """Query for the min and max scheduled flight departure timestamps.
+
+    Returns a `(min_ts, max_ts)` tuple of Unix epoch seconds (UTC). Both
+    values are `None` if the schedules table is empty (after any filter or
+    date conditions are applied)."""
+
+    RESULT_TYPE = tuple
+    """Result type returned by this query class."""
+
+    PROCESS_RESULT = lambda _, gen: tuple(next(gen))  # noqa
+
+    def to_sql(self) -> tuple[str, list]:
+        """Generate the SQL query string and parameters."""
+
+        # Handle filter and date conditions.
+        self._common_conditions()
+
+        sql = (
+            'SELECT MIN(s.departure_timestamp), MAX(s.departure_timestamp) '
+            'FROM schedules s'
+        )
         if len(self._conditions) > 0:
             sql += (
                 ' JOIN flights f ON f.id = s.flight_id '

@@ -4,10 +4,8 @@ from __future__ import annotations
 import random
 import sqlite3
 import threading
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import ClassVar
 
 import numpy as np
 import pytest
@@ -25,176 +23,9 @@ from AEIC.storage import (
 )
 from AEIC.trajectories import TrajectoryStore
 from AEIC.trajectories.trajectory import Trajectory
-from AEIC.types import Species, SpeciesValues
+from AEIC.types import SpeciesValues
 from tests.subproc import run_in_subprocess
-
-
-@dataclass
-class SimpleExtras:
-    """Extra fields (simple types only) add to trajectories for testing."""
-
-    FIELD_SETS: ClassVar[list[FieldSet]] = [
-        FieldSet(
-            'simple_extras',
-            f1=FieldMetadata(description='Test 1', units='unit1'),
-            f2=FieldMetadata(description='Test 2', units='unit2'),
-            mf=FieldMetadata(
-                dimensions=Dimensions(Dimension.TRAJECTORY),
-                field_type=np.int32,
-                description='Test metadata',
-                units='unit3',
-            ),
-        )
-    ]
-
-    # Note type of mf is int, not np.int32. Conversion is done by the
-    # trajectory store when saving data. The field_type in FieldMetadata has to
-    # be a Numpy type!
-
-    f1: np.ndarray
-    f2: np.ndarray
-    mf: int
-
-    @classmethod
-    def random(cls, npoints: int) -> SimpleExtras:
-        return cls(
-            f1=np.random.rand(npoints),
-            f2=np.random.rand(npoints),
-            mf=np.random.randint(0, 100),
-        )
-
-    @classmethod
-    def fixed(cls, npoints: int, f1: float, f2: float, mf: int) -> SimpleExtras:
-        return cls(f1=np.full(npoints, f1), f2=np.full(npoints, f2), mf=mf)
-
-
-@dataclass
-class ComplexExtras:
-    """Extra fields (complex types including species and thrust mode
-    dependence) add to trajectories for testing."""
-
-    FIELD_SETS: ClassVar[list[FieldSet]] = [
-        FieldSet(
-            'complex_extras',
-            tot=FieldMetadata(
-                dimensions=Dimensions.from_abbrev('TS'),
-                description='Total per-species value',
-                units='g',
-            ),
-            seg=FieldMetadata(
-                dimensions=Dimensions.from_abbrev('TSP'),
-                description='Per-segment per-species value',
-                units='g',
-            ),
-            tm=FieldMetadata(
-                dimensions=Dimensions.from_abbrev('TM'),
-                description='Per-thrust mode value',
-                units='g',
-            ),
-            tm2=FieldMetadata(
-                dimensions=Dimensions.from_abbrev('TSM'),
-                description='Per-species per-thrust mode value',
-                units='g',
-            ),
-        )
-    ]
-
-    tot: SpeciesValues[float]
-    seg: SpeciesValues[np.ndarray]
-    tm: ThrustModeValues
-    tm2: SpeciesValues[ThrustModeValues]
-
-    @classmethod
-    def random(cls, npoints: int) -> ComplexExtras:
-        return cls(
-            tot=SpeciesValues(
-                {Species.CO2: random.uniform(0, 10), Species.H2O: random.uniform(0, 10)}
-            ),
-            seg=SpeciesValues(
-                {
-                    Species.CO2: np.random.rand(npoints),
-                    Species.H2O: np.random.rand(npoints),
-                }
-            ),
-            tm=ThrustModeValues(
-                random.uniform(0, 10),
-                random.uniform(0, 10),
-                random.uniform(0, 10),
-                random.uniform(0, 10),
-            ),
-            tm2=SpeciesValues(
-                {
-                    Species.CO2: ThrustModeValues(
-                        random.uniform(0, 10),
-                        random.uniform(0, 10),
-                        random.uniform(0, 10),
-                        random.uniform(0, 10),
-                    ),
-                    Species.H2O: ThrustModeValues(
-                        random.uniform(0, 10),
-                        random.uniform(0, 10),
-                        random.uniform(0, 10),
-                        random.uniform(0, 10),
-                    ),
-                }
-            ),
-        )
-
-
-def make_test_trajectory(
-    npoints: int,
-    seed: int,
-    simple_extras: bool = False,
-    complex_extras: bool = False,
-    nulls: bool = False,
-) -> Trajectory:
-    # Need a way of getting test trajectories with all their fields populated.
-    # The trajectory store doesn't like incomplete data.
-
-    fieldsets = []
-    if simple_extras:
-        fieldsets.append('simple_extras')
-    if complex_extras:
-        fieldsets.append('complex_extras')
-    if len(fieldsets) == 0:
-        fieldsets = None
-
-    t = Trajectory(npoints, name=f'traj_{seed}', fieldsets=fieldsets)
-    t.flight_id = seed
-    t.fuel_flow = np.random.rand(npoints) * 5000 + 2000
-    t.aircraft_mass = np.random.rand(npoints) * 50000 + 100000
-    t.fuel_mass = np.random.rand(npoints) * 50000 + 5000
-    t.ground_distance = np.linspace(0, 1000, npoints)
-    t.altitude = np.linspace(0, 35000, npoints)
-    t.flight_level = t.altitude / 100
-    t.rate_of_climb = np.random.randn(npoints) * 10
-    t.flight_time = np.linspace(0, 3600, npoints)
-    t.latitude = np.random.rand(npoints) * 180 - 90
-    t.longitude = np.random.rand(npoints) * 360 - 180
-    t.azimuth = np.random.rand(npoints) * 360
-    t.heading = np.random.rand(npoints) * 360
-    t.true_airspeed = np.random.rand(npoints) * 300 + 200
-    t.ground_speed = t.true_airspeed + np.random.randn(npoints) * 5
-    t.starting_mass = t.aircraft_mass[0]
-    t.total_fuel_mass = t.fuel_mass[0] - t.fuel_mass[-1]
-    t.n_climb = npoints // 3
-    t.n_cruise = npoints // 3
-    t.n_descent = npoints - t.n_climb - t.n_cruise
-    if simple_extras:
-        extra_fields = SimpleExtras.random(npoints)
-        t.f1 = extra_fields.f1
-        t.f2 = extra_fields.f2
-        t.mf = extra_fields.mf
-    if complex_extras:
-        extra_fields = ComplexExtras.random(npoints)
-        t.tot = extra_fields.tot
-        t.seg = extra_fields.seg
-        t.tm = extra_fields.tm
-        t.tm2 = extra_fields.tm2
-    if nulls:
-        t.flight_id = None
-        t.name = None
-    return t
+from tests.utils import ComplexExtras, SimpleExtras, make_test_trajectory
 
 
 def test_init_checking():
@@ -1038,3 +869,279 @@ def test_file_access_recorder():
         Path.cwd() / 'file3.nc',
         Path.cwd() / 'tmp.sqlite',
     ]
+
+
+def _assert_trajectories_equal(a: Trajectory, b: Trajectory) -> None:
+    """Compare two trajectories field-for-field."""
+    assert a._data_dictionary == b._data_dictionary
+    assert a._fieldsets == b._fieldsets
+    assert len(a) == len(b)
+    for name in a._data_dictionary:
+        va = a._data.get(name)
+        vb = b._data.get(name)
+        if isinstance(va, np.ndarray):
+            assert isinstance(vb, np.ndarray)
+            assert np.array_equal(va[: len(a)], vb[: len(b)])
+        elif isinstance(va, SpeciesValues):
+            assert isinstance(vb, SpeciesValues)
+            assert set(va.keys()) == set(vb.keys())
+            for sp in va.keys():
+                sub_a = va[sp]
+                sub_b = vb[sp]
+                if isinstance(sub_a, np.ndarray):
+                    assert np.array_equal(sub_a, sub_b)
+                elif isinstance(sub_a, ThrustModeValues):
+                    for tm in sub_a.keys():
+                        assert sub_a[tm] == sub_b[tm]
+                else:
+                    assert sub_a == sub_b
+        elif isinstance(va, ThrustModeValues):
+            assert isinstance(vb, ThrustModeValues)
+            for tm in va.keys():
+                assert va[tm] == vb[tm]
+        else:
+            assert va == vb
+
+
+def iter_range_full_check(path: Path):
+    Config.load()
+    with TrajectoryStore.create(base_file=path) as ts:
+        for i in range(1, 11):
+            t = make_test_trajectory(i * 5, i)
+            t.add_fields(SimpleExtras.random(i * 5))
+            t.add_fields(ComplexExtras.random(i * 5))
+            ts.add(t)
+
+    with TrajectoryStore.open(base_file=path) as ts_read:
+        expected = [ts_read[i] for i in range(len(ts_read))]
+        ts_read._trajectories.clear()
+        actual = list(ts_read.iter_range(0, len(ts_read)))
+        assert len(actual) == len(expected)
+        for a, e in zip(actual, expected):
+            _assert_trajectories_equal(a, e)
+
+
+def test_iter_range_full(tmp_path: Path):
+    # Full-range iter_range on a non-merged store with simple + complex extras
+    # should yield trajectories that match __getitem__ field-for-field.
+    run_in_subprocess(iter_range_full_check, tmp_path / 'test.nc')
+
+
+def iter_range_partial_check(path: Path):
+    Config.load()
+    with TrajectoryStore.create(base_file=path) as ts:
+        for i in range(10):
+            ts.add(make_test_trajectory(10 + i, i))
+
+    with TrajectoryStore.open(base_file=path) as ts_read:
+        # Empty range should yield nothing.
+        assert list(ts_read.iter_range(3, 3)) == []
+
+        # Single-element range.
+        expected = [ts_read[4]]
+        ts_read._trajectories.clear()
+        actual = list(ts_read.iter_range(4, 5))
+        assert len(actual) == 1
+        _assert_trajectories_equal(actual[0], expected[0])
+
+        # Narrow middle range.
+        expected = [ts_read[i] for i in range(3, 7)]
+        ts_read._trajectories.clear()
+        actual = list(ts_read.iter_range(3, 7))
+        assert len(actual) == 4
+        for a, e in zip(actual, expected):
+            _assert_trajectories_equal(a, e)
+
+        # Range ending at the last index.
+        expected = [ts_read[i] for i in range(7, 10)]
+        ts_read._trajectories.clear()
+        actual = list(ts_read.iter_range(7, 10))
+        assert len(actual) == 3
+        for a, e in zip(actual, expected):
+            _assert_trajectories_equal(a, e)
+
+        # Out-of-range should raise.
+        try:
+            list(ts_read.iter_range(0, 11))
+        except IndexError:
+            pass
+        else:
+            raise AssertionError("Expected IndexError for stop > len")
+        try:
+            list(ts_read.iter_range(5, 3))
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Expected ValueError for start > stop")
+
+
+def test_iter_range_partial(tmp_path: Path):
+    # Partial ranges (including length-1 and ranges starting at non-zero
+    # offsets) should match __getitem__ for the corresponding indices.
+    run_in_subprocess(iter_range_partial_check, tmp_path / 'test.nc')
+
+
+def iter_range_merged_check(merged_path: Path):
+    Config.load()
+    with TrajectoryStore.open(base_file=merged_path) as ts_merged:
+        assert len(ts_merged) == 8
+
+        # Verify iter_range across the full merged store matches __getitem__.
+        expected = [ts_merged[i] for i in range(len(ts_merged))]
+        ts_merged._trajectories.clear()
+        actual = list(ts_merged.iter_range(0, len(ts_merged)))
+        assert len(actual) == 8
+        for a, e in zip(actual, expected):
+            _assert_trajectories_equal(a, e)
+
+        # Sub-range that straddles a file boundary (size_index = [2,4,6,8]).
+        # Range [1, 5) spans files 0, 1, and 2 — critical bisect_right test.
+        expected = [ts_merged[i] for i in range(1, 5)]
+        ts_merged._trajectories.clear()
+        actual = list(ts_merged.iter_range(1, 5))
+        assert len(actual) == 4
+        for a, e in zip(actual, expected):
+            _assert_trajectories_equal(a, e)
+
+        # Sub-range aligned exactly with a file boundary on both ends.
+        expected = [ts_merged[i] for i in range(2, 6)]
+        ts_merged._trajectories.clear()
+        actual = list(ts_merged.iter_range(2, 6))
+        assert len(actual) == 4
+        for a, e in zip(actual, expected):
+            _assert_trajectories_equal(a, e)
+
+        # Sub-range lying entirely within a single file other than file 0.
+        # size_index=[2,4,6,8] → [5, 6) is inside file 2.
+        expected = [ts_merged[5]]
+        ts_merged._trajectories.clear()
+        actual = list(ts_merged.iter_range(5, 6))
+        assert len(actual) == 1
+        _assert_trajectories_equal(actual[0], expected[0])
+
+        # Batch smaller than the file size to force multiple batches per
+        # file and exercise the batching loop.
+        expected = [ts_merged[i] for i in range(len(ts_merged))]
+        ts_merged._trajectories.clear()
+        actual = list(ts_merged.iter_range(0, len(ts_merged), batch_size=1))
+        assert len(actual) == 8
+        for a, e in zip(actual, expected):
+            _assert_trajectories_equal(a, e)
+
+
+def iter_range_merged_merge(tmp_path: Path):
+    Config.load()
+    paths = [tmp_path / f'test_{i}.nc' for i in range(4)]
+    merged_path = tmp_path / 'merged.aeic-store'
+    TrajectoryStore.merge(input_stores=paths, output_store=merged_path)
+
+
+def test_iter_range_merged_store(tmp_path: Path):
+    # Critical bisect_right test: iter_range across file boundaries on a
+    # merged store built from 4 files of 2 trajectories each (size_index
+    # [2, 4, 6, 8]).
+    run_in_subprocess(basic_merging_create_stores, tmp_path)
+    run_in_subprocess(iter_range_merged_merge, tmp_path)
+    run_in_subprocess(iter_range_merged_check, tmp_path / 'merged.aeic-store')
+
+
+def iter_range_no_cache_pollution_check(path: Path):
+    Config.load()
+    with TrajectoryStore.create(base_file=path) as ts:
+        for i in range(5):
+            ts.add(make_test_trajectory(10, i))
+
+    with TrajectoryStore.open(base_file=path) as ts_read:
+        assert len(ts_read._trajectories) == 0
+        trajectories = list(ts_read.iter_range(0, len(ts_read)))
+        assert len(trajectories) == 5
+        # Cache should still be empty after iteration.
+        assert len(ts_read._trajectories) == 0
+
+
+def test_iter_range_no_cache_pollution(tmp_path: Path):
+    # iter_range must not populate the LRU trajectory cache.
+    run_in_subprocess(iter_range_no_cache_pollution_check, tmp_path / 'test.nc')
+
+
+# --------------- iter_flight_ids ---------------
+
+
+def iter_flight_ids_basic_check(path: Path):
+    Config.load()
+    seeds = list(range(10))
+    with TrajectoryStore.create(base_file=path) as ts:
+        for s in seeds:
+            ts.add(make_test_trajectory(10 + s, s))
+
+    with TrajectoryStore.open(base_file=path) as ts_read:
+        # Request a subset of flight IDs.
+        requested = [1, 3, 5, 7, 9]
+        expected = [ts_read.get_flight(fid) for fid in requested]
+        ts_read._trajectories.clear()
+        actual = list(ts_read.iter_flight_ids(requested))
+        assert len(actual) == len(expected)
+        for a, e in zip(actual, expected):
+            _assert_trajectories_equal(a, e)
+
+
+def test_iter_flight_ids_basic(tmp_path: Path):
+    # Subset lookup should return matching trajectories field-for-field.
+    run_in_subprocess(iter_flight_ids_basic_check, tmp_path / 'test.nc')
+
+
+def iter_flight_ids_missing_check(path: Path):
+    Config.load()
+    seeds = list(range(5))
+    with TrajectoryStore.create(base_file=path) as ts:
+        for s in seeds:
+            ts.add(make_test_trajectory(10, s))
+
+    with TrajectoryStore.open(base_file=path) as ts_read:
+        # Mix of existing (0, 2, 4) and non-existing (99, 100) flight IDs.
+        requested = [0, 2, 4, 99, 100]
+        expected = [ts_read.get_flight(fid) for fid in [0, 2, 4]]
+        ts_read._trajectories.clear()
+        actual = list(ts_read.iter_flight_ids(requested))
+        assert len(actual) == 3
+        for a, e in zip(actual, expected):
+            _assert_trajectories_equal(a, e)
+
+
+def test_iter_flight_ids_missing(tmp_path: Path):
+    # Non-existent flight IDs should be silently skipped.
+    run_in_subprocess(iter_flight_ids_missing_check, tmp_path / 'test.nc')
+
+
+def iter_flight_ids_empty_check(path: Path):
+    Config.load()
+    with TrajectoryStore.create(base_file=path) as ts:
+        ts.add(make_test_trajectory(10, 0))
+
+    with TrajectoryStore.open(base_file=path) as ts_read:
+        actual = list(ts_read.iter_flight_ids([]))
+        assert len(actual) == 0
+
+
+def test_iter_flight_ids_empty(tmp_path: Path):
+    # Empty flight ID list should yield nothing.
+    run_in_subprocess(iter_flight_ids_empty_check, tmp_path / 'test.nc')
+
+
+def iter_flight_ids_no_cache_pollution_check(path: Path):
+    Config.load()
+    with TrajectoryStore.create(base_file=path) as ts:
+        for s in range(5):
+            ts.add(make_test_trajectory(10, s))
+
+    with TrajectoryStore.open(base_file=path) as ts_read:
+        assert len(ts_read._trajectories) == 0
+        trajectories = list(ts_read.iter_flight_ids([0, 1, 2, 3, 4]))
+        assert len(trajectories) == 5
+        # Cache should still be empty after iteration.
+        assert len(ts_read._trajectories) == 0
+
+
+def test_iter_flight_ids_no_cache_pollution(tmp_path: Path):
+    # iter_flight_ids must not populate the LRU trajectory cache.
+    run_in_subprocess(iter_flight_ids_no_cache_pollution_check, tmp_path / 'test.nc')

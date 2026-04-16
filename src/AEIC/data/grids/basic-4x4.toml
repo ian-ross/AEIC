@@ -1,0 +1,10 @@
+[longitude]
+resolution = 4.0
+
+[latitude]
+resolution = 4.0
+
+[altitude]
+mode = "height"
+resolution = 1000
+range = [0, 16000]
