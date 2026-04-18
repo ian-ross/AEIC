@@ -121,7 +121,12 @@ class LegacyContext(Context):
         # Initialize weather regridding when requested.
         self.weather: Weather | None = None
         if builder.options.use_weather:
-            self.weather = Weather(data_dir=config.weather.weather_data_dir)
+            self.weather = Weather(
+                data_dir=config.weather.weather_data_dir,
+                file_resolution=config.weather.file_resolution,
+                data_resolution=config.weather.data_resolution,
+                file_format=config.weather.file_format,
+            )
 
         # Pass information to base context class constructor.
         super().__init__(
