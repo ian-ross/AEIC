@@ -59,6 +59,14 @@ def simulate_slice(
                     pm = performance_model
                     if isinstance(performance_model, PerformanceModelSelector):
                         pm = performance_model(mission)
+                        if pm is None:
+                            logger.warning(
+                                f'no performance model for mission '
+                                f'{mission.origin} -> {mission.destination} '
+                                f'({mission.aircraft_type}, '
+                                f'{mission.gc_distance / 1000:0.2f} km)'
+                            )
+                            continue
                     assert isinstance(pm, BasePerformanceModel)
                     traj = builder.fly(pm, mission)
                     traj.add_fields(compute_emissions(pm, fuel, traj))

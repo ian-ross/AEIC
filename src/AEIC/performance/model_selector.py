@@ -1,3 +1,4 @@
+import logging
 import tomllib
 from pathlib import Path
 from typing import Protocol, runtime_checkable
@@ -7,6 +8,8 @@ from cachetools import LRUCache
 from AEIC.missions import Mission
 from AEIC.performance.models import BasePerformanceModel, PerformanceModel
 
+logger = logging.getLogger(__name__)
+
 
 @runtime_checkable
 class PerformanceModelSelector(Protocol):
@@ -15,10 +18,6 @@ class PerformanceModelSelector(Protocol):
     performance model to use for that mission."""
 
     def __call__(self, mission: Mission) -> BasePerformanceModel: ...
-
-
-# TODO: Make Mission more or less the same as QueryResult ⇒ access to carrier,
-# flight number, engine type, seat capacity, etc.
 
 
 class SimplePerformanceModelSelector:
@@ -72,18 +71,20 @@ class SimplePerformanceModelSelector:
         # Check existence of referenced performance model files.
         for f in self.synonyms.values():
             if not (directory / f'{f}.toml').exists():
-                raise ValueError(
+                logger.warning(
                     f'performance model file {f} referenced '
                     'in config.toml does not exist'
                 )
 
         # Handle default performance model.
-        if 'default' not in self.synonyms:
-            raise ValueError(
-                'performance model directory config.toml must contain a "default" entry'
+        self.default_pm: BasePerformanceModel | None = None
+        if 'default' in self.synonyms:
+            self.default_pm = self._get(self.synonyms['default'])
+            del self.synonyms['default']
+        else:
+            logger.warning(
+                'performance model selector does not contain a "default" entry'
             )
-        self.default_pm = self._get(self.synonyms['default'])
-        del self.synonyms['default']
 
     def _exists(self, ac_type: str) -> bool:
         """Check if a performance model file exists for the given aircraft type."""
@@ -98,7 +99,7 @@ class SimplePerformanceModelSelector:
         self._cache[ac_type] = PerformanceModel.load(pm_path)
         return self._cache[ac_type]
 
-    def __call__(self, mission: Mission) -> BasePerformanceModel:
+    def __call__(self, mission: Mission) -> BasePerformanceModel | None:
         """Main API for looking up a performance model for a mission. This is
         all that's required to satisfy the `PerformanceModelSelector`
         protocol."""
