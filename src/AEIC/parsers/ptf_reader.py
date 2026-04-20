@@ -162,11 +162,13 @@ class PTFData:
                             try:
                                 # Expecting a format like "250/300" for CAS, and,
                                 # e.g. "0.80" for Mach number.
-                                cas_low, cas_high = tokens[2].split('/')
+                                # 10:13 cas_lo; 14:17 cas_hi; 22:24 mach
+                                cas_low = stripped[10:13].strip()
+                                cas_high = stripped[14:17].strip()
                                 speed_data[phase] = SpeedData(
                                     cas_low=int(cas_low) * KNOTS_TO_MPS,
                                     cas_high=int(cas_high) * KNOTS_TO_MPS,
-                                    mach=float(tokens[3]),
+                                    mach=float(stripped[22:26].strip()),
                                 )
                             except Exception:
                                 pass
