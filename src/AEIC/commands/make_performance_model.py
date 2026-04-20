@@ -291,6 +291,12 @@ def make_performance_model(ctx, output_file):
     help='Number of engines on the aircraft (1-8).',
 )
 @click.option(
+    '--maximum-payload',
+    type=int,
+    required=True,
+    help='Maximum payload in kg.',
+)
+@click.option(
     '--apu-name',
     required=False,
     help='Name of the APU used on the aircraft.',
@@ -307,6 +313,7 @@ def legacy(
     ptf_file,
     aircraft_class,
     number_of_engines,
+    maximum_payload,
     apu_name,
 ):
     Config.load()
@@ -335,7 +342,7 @@ def legacy(
         aircraft_class=aircraft_class,
         isa_offset=ptf_data.isa_offset,
         maximum_altitude_ft=ptf_data.maximum_altitude_ft,
-        maximum_payload_kg=ptf_data.maximum_payload,
+        maximum_payload_kg=maximum_payload,
         number_of_engines=number_of_engines,
         apu_name=apu_name,
         lto_dump=lto_dump,
