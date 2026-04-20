@@ -75,7 +75,8 @@ def simulate_slice(
                     logger.exception(
                         'Error simulating mission '
                         f'{mission.origin} -> {mission.destination} '
-                        f'({mission.gc_distance / 1000:0.2f} km):'
+                        f'({mission.aircraft_type}, '
+                        f'{mission.gc_distance / 1000:0.2f} km):'
                     )
                     nfailed += 1
                     continue
