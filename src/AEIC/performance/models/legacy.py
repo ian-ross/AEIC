@@ -209,9 +209,11 @@ class PerformanceTable:
                     )
             case ROCDFilter.POSITIVE:
                 phase = 'climb'
-                if not all(v > self.ZERO_ROCD_TOL for v in self.rocd):
+                # Condition is different here because climb ROCD values can be
+                # zero near the operating ceiling of an aircraft.
+                if not all(v >= 0.0 for v in self.rocd):
                     raise ValueError(
-                        'ROCD values in climb performance table are not all positive'
+                        'some ROCD values in climb performance table are negative'
                     )
 
         # Check that we have the right number of mass values: three for the
