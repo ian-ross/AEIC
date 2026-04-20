@@ -73,7 +73,6 @@ class PTFData:
     aircraft_type: str
     temperature_reference: str
     maximum_altitude_ft: int
-    maximum_payload: int
     low_mass: int
     nominal_mass: int
     high_mass: int
@@ -105,7 +104,6 @@ class PTFData:
 
         # All the following are initialized to zero to ensure types are int.
         maximum_altitude_ft = 0
-        maximum_payload = 0
         low_mass = 0
         nominal_mass = 0
         high_mass = 0
@@ -131,11 +129,6 @@ class PTFData:
                     match_alt = re.search(r"Max Alt\.\s*\[ft\]:\s*([\d,]+)", line)
                     if match_alt:
                         maximum_altitude_ft = int(match_alt.group(1).replace(',', ''))
-
-                    # Max payload
-                    match_payload = re.search(r"Max Payload\s*\[kg\]:\s*([\d,]+)", line)
-                    if match_payload:
-                        maximum_payload = int(match_payload.group(1).replace(',', ''))
 
                     # Mass levels
                     # low mass
@@ -253,7 +246,6 @@ class PTFData:
             aircraft_type=aircraft_type,
             temperature_reference=temperature_reference,
             maximum_altitude_ft=maximum_altitude_ft,
-            maximum_payload=maximum_payload,
             low_mass=low_mass,
             nominal_mass=nominal_mass,
             high_mass=high_mass,
