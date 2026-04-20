@@ -49,7 +49,7 @@ class EDBEntry:
         )
 
     @classmethod
-    def get_engine(cls, excel_file: Path, uid: str) -> EDBEntry:
+    def get_engine(cls, excel_file: Path, uid: str, strict: bool = True) -> EDBEntry:
         """Reads the EDB Excel workbook and returns dict with EDB engine data
         for UID given, combining data from the "Gaseous Emissions and Smoke"
         and "nvPM Emissions" sheets."""
@@ -84,14 +84,15 @@ class EDBEntry:
         gaseous_uids = gaseous['UID No'].astype(str)
         nvpm_uids = nvpm['UID No'].astype(str)
 
+        # Select the first matching row in each sheet (wide-format)
         if uid_str not in set(gaseous_uids):
             raise ValueError(f"UID {uid_str} not found in sheet '{gaseous_sheet}'.")
-        if uid_str not in set(nvpm_uids):
-            raise ValueError(f"UID {uid_str} not found in sheet '{nvpm_sheet}'.")
-
-        # Select the first matching row in each sheet (wide-format)
         g = gaseous[gaseous_uids == uid_str].iloc[0]
-        n = nvpm[nvpm_uids == uid_str].iloc[0]
+        n = None
+        if uid_str in set(nvpm_uids):
+            n = nvpm[nvpm_uids == uid_str].iloc[0]
+        elif strict:
+            raise ValueError(f"UID {uid_str} not found in sheet '{nvpm_sheet}'.")
 
         # Define the four LTO modes in the desired order
         modes = [
@@ -105,7 +106,12 @@ class EDBEntry:
         def mode_dict(template: str, gaseous: bool = True) -> ThrustModeValues:
             row = g if gaseous else n
             return ThrustModeValues(
-                {mode: float(row[template.format(mode=label)]) for mode, label in modes}
+                {
+                    mode: float(row[template.format(mode=label)])
+                    if row is not None
+                    else 0.0
+                    for mode, label in modes
+                }
             )
 
         # Build a dict for this engine
@@ -123,8 +129,8 @@ class EDBEntry:
             nvPM_mass_matrix=mode_dict('nvPM EImass {mode} (mg/kg)', gaseous=False),
             nvPM_num_matrix=mode_dict('nvPM EInum {mode} (#/kg)', gaseous=False),
             PR=mode_dict('Pressure Ratio'),
-            EImass_max=float(n['nvPM EImass Max (mg/kg)']),
+            EImass_max=float(n['nvPM EImass Max (mg/kg)']) if n is not None else 0.0,
             EImass_max_thrust=-1.0,
-            EInum_max=float(n['nvPM EInum Max (#/kg)']),
+            EInum_max=float(n['nvPM EInum Max (#/kg)']) if n is not None else 0.0,
             EInum_max_thrust=-1.0,
         )
