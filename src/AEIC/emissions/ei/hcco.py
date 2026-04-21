@@ -13,6 +13,7 @@ def EI_HCCO(
     ff_cal: ThrustModeValues,
     Tamb: float | np.ndarray,
     Pamb: float | np.ndarray,
+    label: str = '',
 ) -> np.ndarray:
     """
     BFFM2 bilinear HC/CO fit to SLS data
@@ -38,7 +39,7 @@ def EI_HCCO(
 
     if any(x_EI.as_array() == 0.0) or any(ff_cal.as_array() == 0.0):
         logger.warning(
-            'Calibration xEI and fuel flows must be positive. '
+            f'({label}) Calibration xEI and fuel flows must be positive. '
             f'Received x_EI={x_EI}, ff_cal={ff_cal}.'
         )
         return np.zeros(len(ff_eval), dtype=float)

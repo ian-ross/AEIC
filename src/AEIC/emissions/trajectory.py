@@ -39,6 +39,9 @@ def get_trajectory_emissions(
     Calculate emissions for each flight trajectory point.
     """
 
+    name = traj.name
+    assert isinstance(name, str)
+
     # Output emissions indices and emissions.
     indices = SpeciesValues[np.ndarray]()
     emissions = SpeciesValues[np.ndarray]()
@@ -67,6 +70,7 @@ def get_trajectory_emissions(
             pm.lto.fuel_flow,
             Tamb=atmos_state.temperature,
             Pamb=atmos_state.pressure,
+            label=name,
         )
 
     if Species.CO in config.emissions.enabled_species:
@@ -76,6 +80,7 @@ def get_trajectory_emissions(
             pm.lto.fuel_flow,
             Tamb=atmos_state.temperature,
             Pamb=atmos_state.pressure,
+            label=name,
         )
 
     if config.emissions.nvpm_enabled:
