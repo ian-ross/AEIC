@@ -216,13 +216,16 @@ class PerformanceTable:
                         'some ROCD values in climb performance table are negative'
                     )
 
-        # Check that we have the right number of mass values: three for the
-        # climb and cruise phases, but one for the descent sub-table.
-        n_mass_values = 1 if self.rocd_filter == ROCDFilter.NEGATIVE else 3
-        if len(self.mass) != n_mass_values:
+        # Check that we have the right number of mass values: two or three for
+        # the climb and cruise phases, but one for the descent sub-table.
+        mass_ok = True
+        if self.rocd_filter == ROCDFilter.NEGATIVE:
+            mass_ok = len(self.mass) == 1
+        else:
+            mass_ok = len(self.mass) in (2, 3)
+        if not mass_ok:
             raise ValueError(
-                f'Legacy performance table ({phase}) '
-                f'has wrong number of mass values (should be {n_mass_values})'
+                f'Legacy performance table ({phase}) has wrong number of mass values'
             )
 
         # For each of positive, zero, and negative ROCD, it should be the case

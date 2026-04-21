@@ -226,6 +226,9 @@ def lto_from_toml(lto_file) -> LTOPerformance:
 
 def build_performance_table(ptf: PTFData, phase: str) -> dict[str, Any]:
     cols = ['fl', 'mass', 'tas', 'rocd', 'fuel_flow']
+    include_high = True
+    if ptf.high_mass == ptf.nominal_mass:
+        include_high = False
     data = []
     match phase:
         case 'climb':
@@ -234,12 +237,16 @@ def build_performance_table(ptf: PTFData, phase: str) -> dict[str, Any]:
                 data.append(
                     [r.fl, ptf.nominal_mass, r.tas, r.rocd_nom, r.fuel_flow_nom]
                 )
-                data.append([r.fl, ptf.high_mass, r.tas, r.rocd_high, r.fuel_flow_nom])
+                if include_high:
+                    data.append(
+                        [r.fl, ptf.high_mass, r.tas, r.rocd_high, r.fuel_flow_nom]
+                    )
         case 'cruise':
             for r in ptf.cruise:
                 data.append([r.fl, ptf.low_mass, r.tas, 0.0, r.fuel_flow_low])
                 data.append([r.fl, ptf.nominal_mass, r.tas, 0.0, r.fuel_flow_nom])
-                data.append([r.fl, ptf.high_mass, r.tas, 0.0, r.fuel_flow_high])
+                if include_high:
+                    data.append([r.fl, ptf.high_mass, r.tas, 0.0, r.fuel_flow_high])
         case 'descent':
             for r in ptf.descent:
                 data.append(

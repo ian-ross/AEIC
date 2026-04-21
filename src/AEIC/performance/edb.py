@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from AEIC.config import config
@@ -35,6 +36,22 @@ class EDBEntry:
         return hash(self.engine + ':' + self.uid)
 
     def make_lto_performance(self, thrust_fractions: list[float]) -> LTOPerformance:
+        fuel_flow = self.fuel_flow
+        if any(np.isnan(self.fuel_flow.as_array())):
+            full = self.fuel_flow[ThrustMode.TAKEOFF]
+            if not np.isnan(full):
+                fixed_fuel_flow = ThrustModeValues(mutable=True)
+                fixed_fuel_flow[ThrustMode.TAKEOFF] = full
+                thrust = {m: t for m, t in zip(ThrustMode, thrust_fractions)}
+                full_thrust = thrust[ThrustMode.TAKEOFF]
+                for mode in ThrustMode:
+                    if np.isnan(self.fuel_flow[mode]):
+                        fixed_fuel_flow[mode] = full * thrust[mode] / full_thrust
+                    else:
+                        fixed_fuel_flow[mode] = self.fuel_flow[mode]
+                fixed_fuel_flow.freeze()
+                fuel_flow = fixed_fuel_flow
+
         return LTOPerformance(
             source='EDB',
             ICAO_UID=self.uid,
@@ -42,7 +59,7 @@ class EDBEntry:
             thrust_pct=ThrustModeValues(
                 {m: t * 100 for m, t in zip(ThrustMode, thrust_fractions)}
             ),
-            fuel_flow=self.fuel_flow,
+            fuel_flow=fuel_flow,
             EI_NOx=self.EI_NOx_matrix,
             EI_HC=self.HC_EI_matrix,
             EI_CO=self.CO_EI_matrix,
