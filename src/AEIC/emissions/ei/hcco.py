@@ -38,10 +38,7 @@ def EI_HCCO(
     """
 
     if any(x_EI.as_array() == 0.0) or any(ff_cal.as_array() == 0.0):
-        logger.warning(
-            f'({label}) Calibration xEI and fuel flows must be positive. '
-            f'Received x_EI={x_EI}, ff_cal={ff_cal}.'
-        )
+        logger.warning(f'Calibration xEI and fuel flows must be positive. ({label})')
         return np.zeros(len(ff_eval), dtype=float)
 
     # ----------------------------------------------------------------------------
