@@ -32,6 +32,11 @@ def EI_HCCO(
         The HC+CO emission index [g x / kg fuel] at each ff_eval.
     """
 
+    if any(x_EI.as_array() == 0.0):
+        raise ValueError('Calibration xEI values must be positive.')
+    if any(ff_cal.as_array() == 0.0):
+        raise ValueError('Calibration fuel flows for must be positive.')
+
     # ----------------------------------------------------------------------------
     # 1. Compute slanted‐line parameters in log10 space
     #    slope = [log10(xEI[1]) - log10(xEI[0])] / [log10(ff_cal[1]) - log10(ff_cal[0])]
