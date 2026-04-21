@@ -90,14 +90,17 @@ class SimplePerformanceModelSelector:
         """Check if a performance model file exists for the given aircraft type."""
         return (self.directory / f'{ac_type}.toml').exists()
 
-    def _get(self, ac_type: str) -> BasePerformanceModel:
+    def _get(self, ac_type: str) -> BasePerformanceModel | None:
         """Get a performance model from the cache, or load it from file if not
         in the cache."""
         if ac_type in self._cache:
             return self._cache[ac_type]
         pm_path = self.directory / f'{ac_type}.toml'
-        self._cache[ac_type] = PerformanceModel.load(pm_path)
-        return self._cache[ac_type]
+        try:
+            self._cache[ac_type] = PerformanceModel.load(pm_path)
+            return self._cache[ac_type]
+        except FileNotFoundError:
+            return None
 
     def __call__(self, mission: Mission) -> BasePerformanceModel | None:
         """Main API for looking up a performance model for a mission. This is

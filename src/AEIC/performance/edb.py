@@ -116,8 +116,9 @@ class EDBEntry:
 
         # Build a dict for this engine
         return cls(
-            engine=g['Engine Identification'],
             uid=str(uid),
+            # From gasesous sheet.
+            engine=g['Engine Identification'],
             engine_type=g['Eng Type'],
             BP_Ratio=float(g['B/P Ratio']),
             rated_thrust=float(g['Rated Thrust (kN)']),
@@ -126,11 +127,12 @@ class EDBEntry:
             HC_EI_matrix=mode_dict('HC EI {mode} (g/kg)'),
             EI_NOx_matrix=mode_dict('NOx EI {mode} (g/kg)'),
             SN_matrix=mode_dict('SN {mode}'),
-            nvPM_mass_matrix=mode_dict('nvPM EImass {mode} (mg/kg)', gaseous=False),
-            nvPM_num_matrix=mode_dict('nvPM EInum {mode} (#/kg)', gaseous=False),
             PR=mode_dict('Pressure Ratio'),
+            # From nvPM sheet (if available).
             EImass_max=float(n['nvPM EImass Max (mg/kg)']) if n is not None else 0.0,
             EImass_max_thrust=-1.0,
             EInum_max=float(n['nvPM EInum Max (#/kg)']) if n is not None else 0.0,
             EInum_max_thrust=-1.0,
+            nvPM_mass_matrix=mode_dict('nvPM EImass {mode} (mg/kg)', gaseous=False),
+            nvPM_num_matrix=mode_dict('nvPM EInum {mode} (#/kg)', gaseous=False),
         )
