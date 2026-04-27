@@ -23,6 +23,8 @@ of performance model TOML files.
 
 ```{warning}
 Currently, this can obviously only generate "legacy" performance model files!
+A `tasopt` subcommand is also registered (`aeic make-performance-model
+tasopt ...`) but is a stub that currently raises `NotImplementedError`.
 
 Also, the script is unfinished and needs some work by Adi and/or Wyatt to pin
 down some of the choices for generating the performance table and LTO data.
@@ -32,13 +34,14 @@ A complete invocation of {command}`make-performance-model` to generate a
 legacy performance model file looks like this:
 
 ```shell
-uv run make-performance-model \
+aeic make-performance-model \
   --output-file tmp.toml \
   legacy \
   --apu-name 'APU 131-9' \
   --number-of-engines 2 \
   --aircraft-class narrow \
   --ptf-file /home/bada/B738__.PTF \
+  --lto-source edb \
   --engine-file engines/sample_edb.xlsx \
   --engine-uid 01P11CM121
 ```

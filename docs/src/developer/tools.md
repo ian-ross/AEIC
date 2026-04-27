@@ -4,7 +4,7 @@
 
  * All tool configuration and dependency information for AEIC code is held in
    the top-level `pyproject.toml` file.
- * AEIC uses Python 3.13.
+ * AEIC uses Python 3.12.
  * Dependencies are managed using the [`uv` tool](https://docs.astral.sh/uv).
 
 
@@ -55,9 +55,11 @@ before they get into the repository history. It also means fewer "Ruff fixes"
 commits, since you can include running `ruff` as a pre-commit hook, so that
 you never end up committing code that `ruff` doesn't like.
 
-1. Run `pip install --user pre-commit` or `uv run pip install --user
-   pre-commit` (this installs the `pre-commit` executable in `~/.local/bin`,
-   so make sure you have that on your path).
+1. Run `uv tool install pre-commit` (this installs the `pre-commit`
+   executable into the shared `uv`-managed tool directory, which `uv` adds
+   to your path; it's a one-off install, not per-project). If you prefer
+   to manage it yourself, `pip install --user pre-commit` works too, but
+   you'll need to make sure `~/.local/bin` is on your path.
 2. Run `pre-commit install` at the top of your working copy of the repository.
    This sets up the necessary Git hooks to run the `pre-commit` tool.
 3. The `pre-commit` hooks will run and will prevent you from committing until

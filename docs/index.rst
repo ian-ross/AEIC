@@ -27,6 +27,7 @@ performance models, updated trajectory dynamics, parallelization, and more.
    :caption: AEIC modules
 
    src/configuration.md
+   src/cli.md
    src/performance_models/performance_models.md
    src/trajectories/trajectories.md
    src/emission.md
@@ -36,6 +37,7 @@ performance models, updated trajectory dynamics, parallelization, and more.
    src/mission_database.md
    src/oag.md
    src/parsers.md
+   src/storage.md
    src/utilities.md
    src/weather.md
 
@@ -47,3 +49,4 @@ performance models, updated trajectory dynamics, parallelization, and more.
    src/developer/tools.md
    src/developer/conventions.md
    src/developer/releases.md
+   src/developer/grid-map-optimization.md
