@@ -91,7 +91,7 @@ steps:
 7. If requested, calculates a lifecycle CO₂ emissions adjustment and applies
    it to the totals.
 8. Collects together all emissions data into a single {py:class}`Emissions
-   <AEIC.emissions.types.Emissions>` value and returns it.
+   <AEIC.emissions.Emissions>` value and returns it.
 
 ```{eval-rst}
 .. autofunction:: AEIC.emissions.compute_emissions
@@ -110,7 +110,7 @@ species known to AEIC.
 
 ### Emissions output
 
-The {py:class}`Emissions <AEIC.emissions.emission.Emissions>` class holds
+The {py:class}`Emissions <AEIC.emissions.Emissions>` class holds
 emission index and emission quantities for trajectory, LTO, APU, GSE and total
 emissions, as well as some ancillary quantities like fuel burn per segment.
 The emission indices and emission quantities are stored as values of the
@@ -121,7 +121,7 @@ LTO, and `np.ndarray` for trajectory emissions. This structure captures the
 different types of per-species emissions from the different sources.
 
 ```{eval-rst}
-.. autoclass:: AEIC.emissions.emission.Emissions
+.. autoclass:: AEIC.emissions.Emissions
    :members:
 ```
 

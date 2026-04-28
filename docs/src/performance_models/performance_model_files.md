@@ -40,6 +40,7 @@ aeic make-performance-model \
   --apu-name 'APU 131-9' \
   --number-of-engines 2 \
   --aircraft-class narrow \
+  --maximum-payload 22422 \
   --ptf-file /home/bada/B738__.PTF \
   --lto-source edb \
   --engine-file engines/sample_edb.xlsx \
@@ -99,18 +100,18 @@ APU_name = "APU 131-9" # None: APU emissions not calculated
 #
 
 [speeds.climb]
-cas_lo = 128.611
-cas_hi = 154.3332
+cas_low = 128.611
+cas_high = 154.3332
 mach = 0.80
 
 [speeds.cruise]
-cas_lo = 128.611
-cas_hi = 144.04432
+cas_low = 128.611
+cas_high = 144.04432
 mach = 0.80
 
 [speeds.descent]
-cas_lo = 128.611
-cas_hi = 149.18876
+cas_low = 128.611
+cas_high = 149.18876
 mach = 0.80
 
 # ------------------------------------------------------------------------------
@@ -121,7 +122,7 @@ mach = 0.80
 [LTO_performance]
 source = "EDB"
 ICAO_UID = "01P11CM121" # Add UID for EDB data
-Foo_kN = 102.695
+rated_thrust = 102.695
 
 [LTO_performance.mode_data.approach]
 thrust_frac = 0.3
@@ -160,8 +161,12 @@ EI_CO       = 0.0
 #
 # Performance table data.
 #
+# Three separate tables, one per flight phase. Each table has identical
+# `cols` (`fuel_flow, fl, tas, rocd, mass`) and a `data` array indexed
+# first by aircraft mass and then by flight level. `make-performance-model`
+# emits this layout automatically.
 
-[flight_performance]
+[climb_flight_performance]
 cols = [
   "fuel_flow",  # kg/s - REQUIRED; OUTPUT COLUMN
   "fl",  # Flight levels
@@ -171,12 +176,43 @@ cols = [
 ]
 
 data = [
-  [ 1.3283519891023357,   0.0,  80.81275720164649,   23.82067487604034, 51434.0,  33.45038717147103],
-  [0.12407137859174493,   0.0,  74.12551440329176,  -4.666077749500726, 51434.0,  5.460240925557456],
-  [ 1.3287732751930788,   5.0,  81.39379412431006,  23.925338277820426, 51434.0,  33.47349770720624],
+  [ 1.3283519891023357,   0.0,  80.81275720164649,   23.82067487604034, 51434.0],
+  [ 1.3287732751930788,   5.0,  81.39379412431006,  23.925338277820426, 51434.0],
   ... data elided ...
-  [ 1.5102911008506101, 410.0,   235.983685523832,  26.808004912602275, 81371.0, 47.160758804286196],
-  [ 1.1025791086163905, 410.0,   235.983685523832,                 0.0, 81371.0, 29.337465977104877],
-  [0.26136051703345853, 410.0,   235.983685523832, -13.952738253118492, 81371.0,  9.232965393299214],
+  [ 1.5102911008506101, 410.0,   235.983685523832,    50.1228713796996, 51434.0],
+  [ 1.5102911008506101, 410.0,   235.983685523832,  35.296805551618895, 68534.0],
+  [ 1.5102911008506101, 410.0,   235.983685523832,  26.808004912602275, 81371.0],
+]
+
+[cruise_flight_performance]
+cols = [
+  "fuel_flow",  # kg/s - REQUIRED; OUTPUT COLUMN
+  "fl",  # Flight levels
+  "tas",  # m/s
+  "rocd",  # m/s
+  "mass"  # kg
+]
+
+data = [
+  [ 0.5563723740683004,  60.0, 140.08552139650615, 0.0, 51434.0],
+  ... data elided ...
+  [ 0.7943602849587021, 410.0,   235.983685523832, 0.0, 51434.0],
+  [ 0.9157915873634661, 410.0,   235.983685523832, 0.0, 68534.0],
+  [ 1.1025791086163905, 410.0,   235.983685523832, 0.0, 81371.0],
+]
+
+[descent_flight_performance]
+cols = [
+  "fuel_flow",  # kg/s - REQUIRED; OUTPUT COLUMN
+  "fl",  # Flight levels
+  "tas",  # m/s
+  "rocd",  # m/s
+  "mass"  # kg
+]
+
+data = [
+  [0.12407137859174493,   0.0,  74.12551440329176,  -3.376099606296839, 68534.0],
+  ... data elided ...
+  [0.25644997757471305, 410.0,   235.983685523832, -13.102832329609141, 68534.0],
 ]
 ```

@@ -45,19 +45,18 @@ minimum. These methods are passed the `Trajectory` being constructed, plus a
 set of additional builder-specific keyword arguments passed through from
 `fly`, used for any builder-specific specials.
 
-Documentation for the base `Builder` class is currently sparse, and the best
-reference to how to use these things is to look at the `LegacyBuilder`
-implementation. Actually *using* the trajectory builders is simple, but
-implementing a builder is more complicated!
+The base `Builder` class, the shared `Options` dataclass, and the
+`Context` dataclass are documented below. `LegacyBuilder` is the most
+complete reference implementation and the recommended starting point for
+anyone writing a new builder. Actually *using* the trajectory builders is
+simple, but implementing one is more involved.
 
 ```{eval-rst}
 .. WARNING::
-   Some of this code is definitely unfinished. There needs to be a way to
-   incrementally extend trajectories instead of having to specify the length
-   of the trajectory up-front, and there needs to be a smoother API for the
-   builders to save trajectory data for different flight phases. At the
-   moment, there are no helper methods to deal with the "extra" LTO flight
-   phases at all.
+   The builder API is still settling. There are no helper methods on the
+   `Trajectory` or `Builder` classes for the "extra" LTO flight phases
+   (taxi, take-off roll, etc.) — those still need to be handled in the
+   concrete builder.
 ```
 
 ```{eval-rst}
@@ -86,32 +85,45 @@ They are listed here so that consumers who notice them in the public API are
 aware of their status; expect signatures, behaviour, and option sets to
 change as the implementations land.
 
+Each WIP builder ships with a matching `*Options` dataclass that is also
+re-exported from {py:mod}`AEIC.trajectories.builders`. These option
+classes are placeholders; their fields and defaults will change as the
+corresponding builder is implemented.
+
 ### TASOPT builder
 
 {py:class}`TASOPTBuilder <AEIC.trajectories.builders.tasopt.TASOPTBuilder>`
 will drive trajectory simulation from TASOPT-based performance data.
+Configured via
+{py:class}`TASOPTOptions <AEIC.trajectories.builders.tasopt.TASOPTOptions>`.
 
 ```{eval-rst}
 .. WARNING::
-   This builder is a stub and cannot yet fly trajectories end-to-end.
+   This builder and its options class are stubs and cannot yet fly
+   trajectories end-to-end.
 ```
 
 ### ADS-B builder
 
 {py:class}`ADSBBuilder <AEIC.trajectories.builders.ads_b.ADSBBuilder>`
-will reconstruct trajectories from ADS-B track data.
+will reconstruct trajectories from ADS-B track data. Configured via
+{py:class}`ADSBOptions <AEIC.trajectories.builders.ads_b.ADSBOptions>`.
 
 ```{eval-rst}
 .. WARNING::
-   This builder is a stub and cannot yet fly trajectories end-to-end.
+   This builder and its options class are stubs and cannot yet fly
+   trajectories end-to-end.
 ```
 
 ### Dymos builder
 
 {py:class}`DymosBuilder <AEIC.trajectories.builders.dymos.DymosBuilder>`
 will drive trajectory simulation using the Dymos optimal-control library.
+Configured via
+{py:class}`DymosOptions <AEIC.trajectories.builders.dymos.DymosOptions>`.
 
 ```{eval-rst}
 .. WARNING::
-   This builder is a stub and cannot yet fly trajectories end-to-end.
+   This builder and its options class are stubs and cannot yet fly
+   trajectories end-to-end.
 ```
