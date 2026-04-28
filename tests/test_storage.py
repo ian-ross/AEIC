@@ -28,20 +28,44 @@ from tests.subproc import run_in_subprocess
 from tests.utils import ComplexExtras, SimpleExtras, make_test_trajectory
 
 
-def test_init_checking():
-    # Missing NetCDF file name when creating or appending.
-    with pytest.raises(ValueError):
+def test_init_checking(tmp_path: Path):
+    # Missing NetCDF file name when reading or appending. (Required outside of
+    # CREATE mode.)
+    with pytest.raises(ValueError, match='base_file required'):
         _ = TrajectoryStore.open()
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match='base_file required'):
         _ = TrajectoryStore.append()
 
-    # Specifying global attributes in non-create modes.
-    with pytest.raises(ValueError):
-        _ = TrajectoryStore.open(base_file='test.nc', title='Test')
-    with pytest.raises(ValueError):
-        _ = TrajectoryStore.append(base_file='test.nc', title='Test')
+    # Specifying any of the four global-attribute fields in non-CREATE modes.
+    for kwargs in (
+        {'title': 'T'},
+        {'comment': 'C'},
+        {'history': 'H'},
+        {'source': 'S'},
+    ):
+        with pytest.raises(ValueError, match='global attributes'):
+            _ = TrajectoryStore.open(base_file='test.nc', **kwargs)
+        with pytest.raises(ValueError, match='global attributes'):
+            _ = TrajectoryStore.append(base_file='test.nc', **kwargs)
 
-    # TODO: MORE HERE...
+    # `override` and `force_fieldset_matches` are READ-only options.
+    with pytest.raises(ValueError, match='override may only be specified in READ'):
+        _ = TrajectoryStore.create(override=True)
+    with pytest.raises(ValueError, match='override may only be specified in READ'):
+        _ = TrajectoryStore.append(base_file='test.nc', override=True)
+    with pytest.raises(ValueError, match='force_fieldset_matches'):
+        _ = TrajectoryStore.create(force_fieldset_matches=True)
+    with pytest.raises(ValueError, match='force_fieldset_matches'):
+        _ = TrajectoryStore.append(base_file='test.nc', force_fieldset_matches=True)
+
+    # CREATE mode with `base_file=None` cannot also carry associated files —
+    # there is no on-disk store to associate them with yet.
+    with pytest.raises(
+        ValueError, match='associated_files may only be specified in CREATE mode'
+    ):
+        _ = TrajectoryStore.create(
+            associated_files=[(tmp_path / 'extra.nc', ['simple_extras'])]
+        )
 
 
 def simple_create_ts(
@@ -63,16 +87,25 @@ def simple_check_ts(path: Path | str, title: str, lengths: list[int]):
 @pytest.mark.forked
 def test_create_reopen(tmp_path: Path):
     # Create a small TrajectoryStore, save to NetCDF, disabling further
-    # appending (closes NetCDF file), reload from NetCDF.
-
+    # appending (closes NetCDF file), reload from NetCDF. Verifies both
+    # structural metadata (title, length, indexing) *and* per-field numeric
+    # equality between what was written and what comes back, so a regression
+    # that silently permutes axes or rounds values on serialize is caught
+    # here rather than passing on hasattr/shape checks alone.
+    np.random.seed(0)
     path = tmp_path / 'test.nc'
-    simple_create_ts(base_file=path, title='simple case')
-
-    simple_check_ts(path, 'simple case', [10, 15])
+    originals = [make_test_trajectory(10, 1), make_test_trajectory(15, 2)]
+    with TrajectoryStore.create(base_file=path, title='simple case') as ts:
+        for t in originals:
+            ts.add(t)
 
     with TrajectoryStore.open(base_file=path) as ts_read:
-        for traj in ts_read:
-            assert isinstance(traj, Trajectory)
+        assert ts_read.global_attributes['title'] == 'simple case'
+        assert len(ts_read) == 2
+        for i, original in enumerate(originals):
+            loaded = ts_read[i]
+            assert isinstance(loaded, Trajectory)
+            _assert_trajectories_equal(loaded, original)
         with pytest.raises(IndexError):
             ts_read[10]
 
@@ -92,7 +125,7 @@ def test_create_append_reopen(tmp_path: Path):
     simple_check_ts(path, 'append case', [10, 15, 20])
 
 
-@pytest.mark.skip(reason='long test case, enable manually')
+@pytest.mark.slow
 @pytest.mark.forked
 def test_create_reopen_large(tmp_path: Path):
     # Create large TrajectoryStore linked with NetCDF file (~13 Gb) for
@@ -141,23 +174,29 @@ def test_read_nulls(tmp_path: Path):
 
 @pytest.mark.forked
 def test_multi_threading(tmp_path: Path):
-    result = None
+    """TrajectoryStore is documented as single-threaded; constructing one
+    from a worker thread after the main thread has used the class must
+    raise the guard `RuntimeError` (see store.py:378), not silently
+    proceed and corrupt netCDF state.
+    """
+    captured: BaseException | None = None
 
     def worker(idx: int):
-        nonlocal result
-        path = tmp_path / f'test{idx}.nc'
+        nonlocal captured
         try:
-            simple_create_ts(base_file=path, title=f'thread {idx}')
-            result = 'OK'
-        except Exception:
-            result = 'FAILED'
+            simple_create_ts(
+                base_file=tmp_path / f'test{idx}.nc', title=f'thread {idx}'
+            )
+        except BaseException as e:
+            captured = e
 
-    path = tmp_path / 'test.nc'
-    simple_create_ts(base_file=path, title='main thread')
+    simple_create_ts(base_file=tmp_path / 'test.nc', title='main thread')
     t = threading.Thread(target=worker, args=(1,))
     t.start()
     t.join()
-    assert result == 'FAILED'
+
+    assert isinstance(captured, RuntimeError), captured
+    assert 'multiple TrajectoryStore instances' in str(captured)
 
 
 @pytest.mark.forked
@@ -597,6 +636,11 @@ def test_merging_with_associated_files(tmp_path, test_data_dir):
 
 @pytest.mark.forked
 def test_indexing(tmp_path: Path):
+    # Seed both RNGs so the flight-ID sample and the trajectory field values
+    # produced by `make_test_trajectory` are reproducible across runs.
+    random.seed(0)
+    np.random.seed(0)
+
     # 1. Create a unique set of flight IDs.
     ntrajs = 100
     seeds = random.sample(range(1000, 10000), ntrajs)
@@ -642,6 +686,11 @@ def merged_store_indexing_check_stores(seeds, merged_path, test_data_dir):
 
 
 def test_merged_store_indexing(tmp_path, test_data_dir):
+    # Same rationale as `test_indexing`: seed before sampling flight IDs and
+    # generating trajectory fields so the run is reproducible.
+    random.seed(1)
+    np.random.seed(1)
+
     # 1. Create a unique set of flight IDs.
     ntrajs = 1000
     seeds = random.sample(range(10000, 100000), ntrajs)
@@ -828,6 +877,45 @@ def test_append_to_container_by_keywords_bad():
         container_extensible.append(per_point_1=10)
 
 
+def test_container_equality_handles_str_and_none_fields():
+    """`Container.__eq__` and `approx_eq` both branch on
+    `isinstance(vs, (str, type(None)))` to fall into the direct-equality
+    arm. The audit flagged the original `str | None` form as a latent
+    runtime bug — pin a regression by stuffing `Trajectory.name`
+    (`str | None`) with both leg values and exercising both paths.
+    """
+    np.random.seed(0)
+    a = make_test_trajectory(5, 1)
+
+    # str leg: equal -> both eq and approx_eq True.
+    a.name = 'shared-name'
+    a_copy = a.copy()
+    assert a == a_copy
+    assert a.approx_eq(a_copy)
+
+    # str leg: differ -> both False.
+    a_copy.name = 'other-name'
+    assert a != a_copy
+    assert not a.approx_eq(a_copy)
+
+    # None leg: both sides None -> both True.
+    a.name = None
+    a_copy = a.copy()
+    assert a == a_copy
+    assert a.approx_eq(a_copy)
+
+    # None leg: one side None, other side str -> both False.
+    a_copy.name = 'now-set'
+    assert a != a_copy
+    assert not a.approx_eq(a_copy)
+
+    # str on one side, None on the other (reversed) — both False.
+    a.name = 'x'
+    a_copy.name = None
+    assert a != a_copy
+    assert not a.approx_eq(a_copy)
+
+
 def test_append_to_container_by_class():
     # Create extensible container, append points by single point container
     # class (enough to trigger capacity expansion), check data.
@@ -843,31 +931,30 @@ def test_append_to_container_by_class():
     assert container_extensible.per_point_2.tolist() == list(range(20, 1420, 20))
 
 
-def test_file_access_recorder():
+def test_file_access_recorder(tmp_path: Path):
     # Create a FileAccessRecorder, record some accesses, check that they were
     # recorded correctly.
-    def safe_open(f):
-        try:
-            return open(f)
-        except FileNotFoundError:
-            return None
-
-    def safe_sqlite3_connect(f):
-        try:
-            return sqlite3.connect(f)
-        except FileNotFoundError:
-            return None
+    file1 = tmp_path / 'file1.nc'
+    file2 = tmp_path / 'file2.nc'
+    file3 = tmp_path / 'file3.nc'
+    sqlite_db = tmp_path / 'tmp.sqlite'
+    for f in (file1, file2, file3):
+        f.touch()
 
     with track_file_accesses():
-        safe_open('file1.nc')
-        safe_open('file2.nc')
-        safe_open('file3.nc')
-        safe_sqlite3_connect('tmp.sqlite')
+        with open(file1):
+            pass
+        with open(file2):
+            pass
+        with open(file3):
+            pass
+        sqlite3.connect(sqlite_db).close()
+
     assert access_recorder.paths == [
-        Path.cwd() / 'file1.nc',
-        Path.cwd() / 'file2.nc',
-        Path.cwd() / 'file3.nc',
-        Path.cwd() / 'tmp.sqlite',
+        file1.resolve(),
+        file2.resolve(),
+        file3.resolve(),
+        sqlite_db.resolve(),
     ]
 
 

@@ -13,8 +13,22 @@ from AEIC.types import Fuel
 # Absolute path to test data directory.
 TEST_DATA_DIR = (Path(__file__).parent / 'data').resolve()
 
-# Set the path to include the test data directory.
+# Set the path to include the test data directory. This is done at module
+# import time deliberately so the value is inherited by subprocesses spawned
+# via `tests/subproc.py::run_in_subprocess`, which need the same AEIC_PATH
+# when they re-import this conftest. Mutating it here on import (vs. inside
+# a fixture) keeps the parent and child processes in agreement.
 os.environ['AEIC_PATH'] = str(TEST_DATA_DIR)
+
+
+def pytest_addoption(parser):
+    """Register CLI flags."""
+    parser.addoption(
+        '--run-slow',
+        action='store_true',
+        default=False,
+        help='also run tests marked @pytest.mark.slow (skipped by default)',
+    )
 
 
 def pytest_configure(config):
@@ -24,6 +38,20 @@ def pytest_configure(config):
         'config_updates(**kwargs): '
         'Mark test to update default config with given key-value pairs.',
     )
+    config.addinivalue_line(
+        'markers',
+        'slow: long-running test, skipped unless --run-slow is passed.',
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip @pytest.mark.slow tests unless --run-slow was passed."""
+    if config.getoption('--run-slow'):
+        return
+    skip_slow = pytest.mark.skip(reason='slow test; pass --run-slow to enable')
+    for item in items:
+        if 'slow' in item.keywords:
+            item.add_marker(skip_slow)
 
 
 @pytest.fixture
@@ -34,6 +62,17 @@ def test_data_dir():
 # Set up and tear down global configuration around each test.
 @pytest.fixture(autouse=True)
 def default_config(request):
+    """Autouse fixture that loads the default AEIC `Config` for every test.
+
+    Tests that need to drive `Config.load()` themselves (e.g. to assert on
+    the load mechanics, or to load multiple configs in sequence) opt out by
+    redefining a fixture of the same name in their own module — pytest's
+    fixture resolution will prefer the closer override. See
+    `tests/test_config.py` for an example. An overriding fixture should
+    accept `request` and assert that no `@pytest.mark.config_updates`
+    marker is attached, so users who write the marker on a test that
+    happens to fall under the override aren't silently ignored.
+    """
     # Updates to the default configuration are pulled from the config_updates
     # marker.
     data_marker = request.node.get_closest_marker('config_updates')

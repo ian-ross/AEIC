@@ -42,8 +42,13 @@ def test_dimensions_equality():
     assert dims1 == dims2
     assert dims1 != dims3
     assert dims1 != 'not a Dimensions object'
-    assert str(dims1) == 'Dimensions(TP)'
-    assert repr(dims3) == 'Dimensions(TM)'
+
+
+def test_dimensions_str_repr():
+    dims_tp = Dimensions(Dimension.TRAJECTORY, Dimension.POINT)
+    dims_tm = Dimensions(Dimension.TRAJECTORY, Dimension.THRUST_MODE)
+    assert str(dims_tp) == 'Dimensions(TP)'
+    assert repr(dims_tm) == 'Dimensions(TM)'
 
 
 def test_dimensions_add():
@@ -62,6 +67,19 @@ def test_dimensions_ordered():
     assert dims.ordered == [Dimension.TRAJECTORY, Dimension.SPECIES, Dimension.POINT]
 
 
+def test_dimensions_netcdf():
+    # POINT is excluded — it's the implicit per-trajectory axis in the
+    # on-disk layout — and the remaining names come back in standard
+    # Dimension-enum order regardless of construction order.
+    assert Dimensions(Dimension.TRAJECTORY, Dimension.POINT).netcdf == ('trajectory',)
+    assert Dimensions(
+        Dimension.POINT, Dimension.SPECIES, Dimension.TRAJECTORY
+    ).netcdf == ('trajectory', 'species')
+    assert Dimensions(
+        Dimension.THRUST_MODE, Dimension.SPECIES, Dimension.TRAJECTORY
+    ).netcdf == ('trajectory', 'species', 'thrust_mode')
+
+
 def test_dimensions_abbrevs():
     dims = Dimensions(Dimension.TRAJECTORY, Dimension.POINT, Dimension.SPECIES)
     assert dims.abbrev == 'TSP'
@@ -69,3 +87,33 @@ def test_dimensions_abbrevs():
     assert dims == Dimensions(Dimension.TRAJECTORY, Dimension.SPECIES)
     with pytest.raises(ValueError):
         Dimensions.from_abbrev('TSX')
+
+
+def test_dimension_dim_name():
+    assert Dimension.TRAJECTORY.dim_name == 'trajectory'
+    assert Dimension.POINT.dim_name == 'point'
+    assert Dimension.SPECIES.dim_name == 'species'
+    assert Dimension.THRUST_MODE.dim_name == 'thrust_mode'
+
+
+def test_dimensions_remove():
+    dims = Dimensions(Dimension.TRAJECTORY, Dimension.POINT, Dimension.SPECIES)
+    reduced = dims.remove(Dimension.SPECIES)
+    assert reduced == Dimensions(Dimension.TRAJECTORY, Dimension.POINT)
+    # Removing a dimension that isn't present is a no-op (no raise).
+    assert dims.remove(Dimension.THRUST_MODE) == dims
+    # Removing the trajectory dimension violates the constructor invariant
+    # and must raise rather than silently produce an invalid Dimensions.
+    with pytest.raises(ValueError):
+        dims.remove(Dimension.TRAJECTORY)
+
+
+def test_dimensions_from_dim_names():
+    dims = Dimensions.from_dim_names('trajectory', 'point')
+    assert dims == Dimensions(Dimension.TRAJECTORY, Dimension.POINT)
+    dims = Dimensions.from_dim_names('trajectory', 'species', 'thrust_mode')
+    assert dims == Dimensions(
+        Dimension.TRAJECTORY, Dimension.SPECIES, Dimension.THRUST_MODE
+    )
+    with pytest.raises(ValueError):
+        Dimensions.from_dim_names('trajectory', 'not_a_dim')

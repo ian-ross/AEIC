@@ -34,7 +34,13 @@ def example_mission_with_weather():
 
 @pytest.fixture
 def iteration_params():
-    return dict(test_reltol=1e-6, test_maxiters=1000)
+    # `test_maxiters=20` is plenty of headroom for the BOS-LAX mission used
+    # in these tests (the mass iteration converges in ~7 cycles at
+    # reltol=1e-6 against the sample performance model). The original
+    # `test_maxiters=1000` would have masked a regression that, e.g.,
+    # stopped converging quadratically — the test would just have run
+    # longer instead of failing loudly.
+    return dict(test_reltol=1e-6, test_maxiters=20)
 
 
 test_fields = FieldSet(
@@ -49,34 +55,57 @@ test_fields = FieldSet(
 
 
 def test_trajectory_simulation_single(sample_missions, performance_model):
+    """A simulated trajectory has all three required flight phases
+    populated and respects basic mass invariants. Pure `len(traj) > 10`
+    would have passed even if `LegacyBuilder` truncated every trajectory
+    to 11 points or skipped an entire phase.
+    """
     builder = tb.LegacyBuilder(options=tb.Options(iterate_mass=False))
 
     mis = sample_missions[0]
     traj = builder.fly(performance_model, mis)
 
     assert len(traj) > 10
+    assert traj.n_climb > 0
+    assert traj.n_cruise > 0
+    assert traj.n_descent > 0
+    assert traj.n_climb + traj.n_cruise + traj.n_descent <= len(traj)
+
+    # Fuel was burned but nothing else changed: aircraft mass finishes
+    # heavier than empty and lighter than the starting mass; fuel mass
+    # strictly decreases.
+    assert performance_model.empty_mass < float(traj.aircraft_mass[-1])
+    assert float(traj.aircraft_mass[-1]) < float(traj.starting_mass)
+    assert float(traj.fuel_mass[0]) > float(traj.fuel_mass[-1]) >= 0
 
 
+@pytest.mark.forked
 def test_trajectory_simulation_basic(tmp_path, sample_missions, performance_model):
     fname = tmp_path / 'test_trajectories.nc'
 
     builder = tb.LegacyBuilder(options=tb.Options(iterate_mass=False))
     ts = TrajectoryStore.create(base_file=fname)
 
+    rng = np.random.default_rng(0)
+    original_fields = []
     for mis in sample_missions:
         traj = builder.fly(performance_model, mis)
         traj.add_fields(test_fields)
-        traj.test_field1 = np.random.rand(len(traj))
-        traj.test_field2 = np.random.randint(0, 100, size=len(traj))
+        traj.test_field1 = rng.random(len(traj), dtype=np.float32)
+        traj.test_field2 = rng.integers(0, 100, size=len(traj), dtype=np.int32)
+        original_fields.append((traj.test_field1.copy(), traj.test_field2.copy()))
         ts.add(traj)
 
     ts.close()
 
     ts_loaded = TrajectoryStore.open(base_file=fname)
     assert len(ts_loaded) == len(ts)
-    # TODO: Test that additional fields are correctly saved and loaded.
+    for traj_loaded, (f1, f2) in zip(ts_loaded, original_fields):
+        assert np.array_equal(traj_loaded.test_field1, f1)
+        assert np.array_equal(traj_loaded.test_field2, f2)
 
 
+@pytest.mark.forked
 def test_trajectory_simulation_outside_weather_domain(
     example_mission, performance_model
 ):
@@ -86,12 +115,24 @@ def test_trajectory_simulation_outside_weather_domain(
         builder.fly(performance_model, example_mission)
 
 
+@pytest.mark.forked
 def test_trajectory_simulation_weather(example_mission_with_weather, performance_model):
-    builder = tb.LegacyBuilder(options=tb.Options(use_weather=True, iterate_mass=False))
+    """Use-weather builds a trajectory whose ground speed differs from
+    the no-weather baseline: without that, `len(traj) > 0` would pass
+    even if `use_weather=True` had no effect.
+    """
+    builder_wx = tb.LegacyBuilder(
+        options=tb.Options(use_weather=True, iterate_mass=False)
+    )
+    builder_nowx = tb.LegacyBuilder(
+        options=tb.Options(use_weather=False, iterate_mass=False)
+    )
 
-    traj = builder.fly(performance_model, example_mission_with_weather)
+    traj_wx = builder_wx.fly(performance_model, example_mission_with_weather)
+    traj_nowx = builder_nowx.fly(performance_model, example_mission_with_weather)
 
-    assert len(traj) > 0
+    assert len(traj_wx) > 0
+    assert np.any(traj_wx.ground_speed != traj_nowx.ground_speed)
 
 
 def test_trajectory_mass_iter(performance_model, example_mission, iteration_params):
@@ -138,10 +179,77 @@ def test_trajectory_mass_iter_fail(
         builder_fail.fly(performance_model, example_mission)
 
 
+# Empirical baseline: with `mass_iter_reltol=1e-6` against the sample
+# performance model, the BOS→LAX `example_mission` first converges at
+# `max_mass_iters=7`. The boundary test below pins both directions:
+# `max_mass_iters=6` must raise, `max_mass_iters=7` must succeed. A
+# regression that shifted the iteration count by one would land here
+# rather than slipping through the loose `max_mass_iters=1` failure case
+# and the (pre-fix) `max_mass_iters=1000` success case.
+_MIN_ITERS_TO_CONVERGE = 7
+
+
+@pytest.mark.parametrize(
+    'max_mass_iters,should_converge',
+    [
+        (_MIN_ITERS_TO_CONVERGE - 1, False),
+        (_MIN_ITERS_TO_CONVERGE, True),
+    ],
+    ids=['just_below_boundary', 'exactly_at_boundary'],
+)
+def test_trajectory_mass_iter_boundary(
+    performance_model, example_mission, max_mass_iters, should_converge
+):
+    builder = tb.LegacyBuilder(
+        options=tb.Options(
+            iterate_mass=True,
+            max_mass_iters=max_mass_iters,
+            mass_iter_reltol=1e-6,
+        )
+    )
+    if should_converge:
+        traj = builder.fly(performance_model, example_mission)
+        assert len(traj) > 0
+    else:
+        with pytest.raises(RuntimeError, match='Mass iteration failed to converge'):
+            builder.fly(performance_model, example_mission)
+
+
+@pytest.mark.parametrize(
+    'cls',
+    [tb.TASOPTBuilder, tb.ADSBBuilder, tb.DymosBuilder],
+    ids=['TASOPT', 'ADSB', 'Dymos'],
+)
+def test_stub_builder_raises_not_implemented(cls):
+    """Stub builders must raise on construction so a half-implemented
+    subclass can't quietly land — the `NotImplementedError` is the only
+    surface saying "this isn't ready" and nothing else polices it.
+    """
+    with pytest.raises(NotImplementedError):
+        cls()
+
+
 def test_trajectory_performance_model_selector(
     performance_model_selector, sample_missions
 ):
+    """Builder threaded with a selector dispatches each mission via the
+    selector. Pure `len(traj) > 0` would have passed even if every
+    dispatch silently returned the default model.
+    """
+    expected_models = [
+        'B738',
+        'B738',
+        'B738',
+        'B738',
+        'B738',
+        'A380',
+        'A380',
+        'B738',
+        'B738',
+        'A380',
+    ]
     builder = tb.LegacyBuilder(options=tb.Options(iterate_mass=False))
-    for mis in sample_missions:
+    for mis, expected in zip(sample_missions, expected_models):
+        assert performance_model_selector(mis).aircraft_name == expected
         traj = builder.fly(performance_model_selector, mis)
         assert len(traj) > 0

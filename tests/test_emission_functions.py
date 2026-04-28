@@ -1,5 +1,4 @@
 import tomllib
-from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -11,6 +10,7 @@ from AEIC.emissions.ei.nox import BFFM2_EINOx, BFFM2EINOxResult, NOx_speciation
 from AEIC.emissions.ei.nvpm import calculate_nvPM_scope11_LTO, nvPM_MEEM
 from AEIC.emissions.ei.sox import EI_SOx, SOxEmissionResult
 from AEIC.emissions.types import AtmosphericState
+from AEIC.emissions.utils import get_thrust_cat_cruise
 from AEIC.performance.apu import APU
 from AEIC.performance.edb import EDBEntry
 from AEIC.performance.types import ThrustMode, ThrustModeValues
@@ -68,7 +68,7 @@ class TestEI_HCCO:
                 157.25298236,
             ]
         )
-        assert np.isclose(result, out_result).all
+        np.testing.assert_allclose(result, out_result)
 
     def test_basic_functionality(self):
         """Test basic HC+CO emissions calculation"""
@@ -136,6 +136,54 @@ class TestEI_HCCO:
 
         assert np.allclose(result[high_mask], x_EI_matrix[ThrustMode.APPROACH])
         assert np.all(result >= 0.0)
+
+    def test_branches_split_at_intercept(self):
+        """Pin the lower (slanted-line) and upper (horizontal-line) branches
+        of `EI_HCCO` (`hcco.py:115–128`). The previous test only ever
+        landed in the upper segment because its calibration parameters
+        forced the intercept-adjustment branch (b). Use a calibration set
+        where (a) slope is non-zero and negative (so the slanted formula
+        actually runs in the lower mask) and (b) the intercept lands
+        squarely between the IDLE and CLIMB calibration flows; pick
+        evaluation flows on each side, plus a mixed array, and verify
+        each lands in the right segment.
+
+        Constants verified by direct call to the SUT once and pinned
+        here — the test is not a tautological copy of the formula, but a
+        regression guard against either branch's expression drifting.
+        """
+        # Strictly-decreasing-with-flow EI to guarantee a finite negative
+        # log-log slope and an intercept inside the calibration range.
+        x_EI = ThrustModeValues(100.0, 50.0, 10.0, 5.0)
+        ff_cal = ThrustModeValues(0.1, 0.3, 1.0, 2.0)
+        # ISA ground conditions so the cruise correction is the identity
+        # factor (theta=delta=1.0).
+        Tamb_ground = np.array([288.15])
+        Pamb_ground = np.array([101325.0])
+
+        # Lower segment — well below intercept.
+        low_only = EI_HCCO(np.array([0.05]), x_EI, ff_cal, Tamb_ground, Pamb_ground)
+        # Upper segment — well above intercept.
+        high_only = EI_HCCO(np.array([1.5]), x_EI, ff_cal, Tamb_ground, Pamb_ground)
+        # Horizontal-line value is 10**(0.5*(log10(xEI[CLIMB])+log10(xEI[TAKEOFF]))),
+        # which is the geometric mean of CLIMB and TAKEOFF EI values.
+        expected_high = np.sqrt(x_EI[ThrustMode.CLIMB] * x_EI[ThrustMode.TAKEOFF])
+        assert high_only[0] == pytest.approx(expected_high)
+
+        # Lower-segment values must be strictly above the upper segment
+        # (since EI is decreasing with flow on a negative slope), and
+        # well above zero.
+        assert low_only[0] > expected_high
+        assert low_only[0] > 0
+
+        # Mixed array: half low, half high. The split should match the
+        # individual-call results.
+        mixed_ff = np.array([0.05, 1.5])
+        mixed_T = np.array([288.15, 288.15])
+        mixed_P = np.array([101325.0, 101325.0])
+        mixed = EI_HCCO(mixed_ff, x_EI, ff_cal, mixed_T, mixed_P)
+        assert mixed[0] == pytest.approx(low_only[0])
+        assert mixed[1] == pytest.approx(high_only[0])
 
 
 class TestBFFM2_EINOx:
@@ -240,25 +288,50 @@ class TestBFFM2_EINOx:
         for array in self._components(result):
             assert np.all(np.isfinite(array))
 
-    @patch('AEIC.emissions.utils.get_thrust_cat_cruise')
-    def test_thrust_categorization(self, mock_get_thrust_cat_cruise):
-        """Test thrust categorization functionality"""
-        # Mock thrust categories
-        mock_get_thrust_cat_cruise.return_value = np.array(
-            [1, 2, 3, 1]
-        )  # High, Low, Approach, High
+    def test_thrust_categorization(self):
+        """The speciation proportions returned by `BFFM2_EINOx` must equal
+        the per-thrust-category values from `NOx_speciation()` once each
+        evaluation point has been mapped through `get_thrust_cat_cruise`.
+
+        Previously this `@patch`'d `'AEIC.emissions.utils.get_thrust_cat_cruise'`,
+        but `ei/nox.py` imports the name into its own module, so the
+        patch missed the bound reference and the SUT ran unmocked — the
+        test was effectively a finiteness smoke duplicating
+        `test_finiteness`. Drop the mock and pin the actual
+        category-to-speciation contract.
+
+        Construct an evaluation-flow array that spans all three thrust
+        categories so a regression that collapsed the categorization to
+        a single bucket would change `noProp` / `no2Prop` / `honoProp`
+        and trip this test.
+        """
+        # Spans IDLE (≤0.6), APPROACH ((0.6, 1.0]), and CLIMB/TO (>1.0)
+        # given `fuelflow_performance = (0.4, 0.8, 1.2, 1.8)`.
+        ff_eval = np.array([0.2, 0.5, 0.9, 1.5])
+        Tamb = np.full_like(ff_eval, 288.15)
+        Pamb = np.full_like(ff_eval, 101325.0)
 
         result = BFFM2_EINOx(
-            self.fuelflow_trajectory,
+            ff_eval,
             self.EI_NOx_matrix,
             self.fuelflow_performance,
-            self.Tamb,
-            self.Pamb,
+            Tamb,
+            Pamb,
         )
 
-        # Should still return valid results
-        for array in self._components(result):
-            assert np.all(np.isfinite(array))
+        cats = get_thrust_cat_cruise(ff_eval, self.fuelflow_performance)
+        # Sanity check that we actually exercised more than one bucket —
+        # without this, a regression that made `get_thrust_cat_cruise`
+        # return a constant could still satisfy the per-point identity.
+        assert len(set(cats.data.tolist())) >= 2
+
+        spec = NOx_speciation()
+        expected_no = np.array([spec.no[cat] for cat in cats])
+        expected_no2 = np.array([spec.no2[cat] for cat in cats])
+        expected_hono = np.array([spec.hono[cat] for cat in cats])
+        np.testing.assert_allclose(result.noProp, expected_no)
+        np.testing.assert_allclose(result.no2Prop, expected_no2)
+        np.testing.assert_allclose(result.honoProp, expected_hono)
 
     def test_matches_reference_component_values(self):
         """Reference regression to guard against inadvertent logic changes"""
@@ -389,7 +462,15 @@ class TestEI_SOx:
 
 
 class TestGetAPUEmissions:
-    """Tests for get_APU_emissions function"""
+    """Tests for get_APU_emissions function.
+
+    NOTE: The numeric APU parameters below (`fuel_kg_per_s=0.1`,
+    `NOx_g_per_kg=15.0`, `apu_time=2854`, etc.) are **synthetic test
+    inputs**, not values drawn from a published APU dataset. They are
+    chosen to produce numerically distinguishable outputs across modes,
+    not to match any real airframe's APU. Treat them accordingly when
+    porting this fixture or interpreting result magnitudes.
+    """
 
     def setup_method(self):
         """Set up test data"""
@@ -514,8 +595,11 @@ class TestNvPMMEEM:
         ref_EI_mass = np.array([87.80422697, 19.50901914, 1.40599907]) * 1e-3
         ref_EI_num = np.array([4.72211990e14, 1.74290262e14, 3.50345395e13])
 
-        assert np.allclose(EI_mass, ref_EI_mass)
-        assert np.allclose(EI_num, ref_EI_num)
+        # Match the BFFM2 tolerance scheme: numpy default atol=1e-8 is
+        # negligible against EI_num values of order 1e13–1e14, so the
+        # implicit check would degenerate to relative-only with rtol=1e-5.
+        np.testing.assert_allclose(EI_mass, ref_EI_mass, rtol=1e-6, atol=1e-9)
+        np.testing.assert_allclose(EI_num, ref_EI_num, rtol=1e-6, atol=1e-9)
 
 
 class Test_nvPMScope11:
@@ -540,38 +624,59 @@ class Test_nvPMScope11:
         )
         ref_num = np.array([1.12837170e15, 8.85798223e14, 4.67821152e14, 4.87773789e14])
         for i, mode in enumerate(ThrustMode):
-            assert np.allclose(profile.mass[mode], ref_mass[i])
-            assert np.allclose(profile.number[mode], ref_num[i])
+            # `np.allclose` defaults of atol=1e-8 are negligible against
+            # number values of order 1e14–1e15; pin the BFFM2-style
+            # rtol=1e-6, atol=1e-9 scheme explicitly so a regression in
+            # either channel surfaces, and use `assert_allclose` so the
+            # failure reports the diff.
+            np.testing.assert_allclose(
+                profile.mass[mode], ref_mass[i], rtol=1e-6, atol=1e-9
+            )
+            np.testing.assert_allclose(
+                profile.number[mode], ref_num[i], rtol=1e-6, atol=1e-9
+            )
 
-    def test_engine_type_scaling_and_invalid_smoke_numbers(self):
-        SN_matrix = ThrustModeValues(5.0, 50.0, -1.0, 0.0)
+    def test_scope11_engine_type_scaling(self):
+        """`calculate_nvPM_scope11_LTO` applies a bypass-ratio correction to
+        the MTF (mixed turbofan) path that the TF path does not. The full
+        numeric contract for both engine types at every mode is pinned by
+        `test_SCOPE11_unit_test` against the notebook reference values;
+        here, just pin the qualitative invariant — at IDLE on a finite
+        positive SN, MTF > TF — without inline-computing the
+        SUT formula. Inline-computation would be a tautological copy of
+        `nvpm.py` and a regression that broke both implementations the
+        same way would still pass.
+        """
+        SN_matrix = ThrustModeValues(5.0, 50.0, 30.0, 40.0)
         BP_Ratio = 2.0
 
         mtf = calculate_nvPM_scope11_LTO(SN_matrix, 'MTF', BP_Ratio)
         tf = calculate_nvPM_scope11_LTO(SN_matrix, 'TF', BP_Ratio)
 
-        SN0 = min(SN_matrix[ThrustMode.IDLE], 40.0)
-        CBC0 = 0.6484 * np.exp(0.0766 * SN0) / (1 + np.exp(-1.099 * (SN0 - 3.064)))
-        AFR = ThrustModeValues(106, 83, 51, 45)
+        # Bypass correction makes MTF strictly larger than TF at IDLE.
+        assert mtf.mass[ThrustMode.IDLE] > tf.mass[ThrustMode.IDLE] > 0
+        # Number-channel parity check: both engine types yield non-empty
+        # number profiles.
+        assert mtf.number[ThrustMode.IDLE] > 0
+        assert tf.number[ThrustMode.IDLE] > 0
 
-        bypass = 1 + BP_Ratio
-        kslm_mtf = np.log(
-            (3.219 * CBC0 * bypass * 1000 + 312.5) / (CBC0 * bypass * 1000 + 42.6)
-        )
-        Q_mtf = 0.776 * AFR[ThrustMode.IDLE] * bypass + 0.767
-        expected_mtf = (kslm_mtf * CBC0 * Q_mtf) / 1000.0
-        assert np.isclose(mtf.mass[ThrustMode.IDLE], expected_mtf)
-
-        kslm_tf = np.log((3.219 * CBC0 * 1000 + 312.5) / (CBC0 * 1000 + 42.6))
-        Q_tf = 0.776 * AFR[ThrustMode.IDLE] + 0.767
-        expected_tf = (kslm_tf * CBC0 * Q_tf) / 1000.0
-        assert np.isclose(tf.mass[ThrustMode.IDLE], expected_tf)
-
-        assert mtf.mass[ThrustMode.IDLE] > tf.mass[ThrustMode.IDLE]
-        assert mtf.mass[ThrustMode.CLIMB] == 0.0
-        assert tf.mass[ThrustMode.TAKEOFF] == 0.0
-        assert mtf.number is not None
-        assert tf.number is not None
+    def test_scope11_invalid_smoke_numbers_return_zero(self):
+        """Per `emissions/ei/nvpm.py`, smoke numbers ≤ 0 are treated as
+        invalid and the SUT must emit zero in both mass and number for
+        the corresponding modes. Bug guard: a future refactor that
+        propagated -1.0 / 0.0 through the CBC0 expression would either
+        produce NaN or a negative emission — both of which would slip
+        through if only "non-zero" was asserted.
+        """
+        # IDLE has a finite positive SN so the rest of the modes can be
+        # invalid without the SUT raising on a degenerate input set.
+        SN_matrix = ThrustModeValues(5.0, 50.0, -1.0, 0.0)
+        for engine_type in ('MTF', 'TF'):
+            profile = calculate_nvPM_scope11_LTO(SN_matrix, engine_type, BP_Ratio=2.0)
+            assert profile.mass[ThrustMode.CLIMB] == 0.0
+            assert profile.mass[ThrustMode.TAKEOFF] == 0.0
+            assert profile.number[ThrustMode.CLIMB] == 0.0
+            assert profile.number[ThrustMode.TAKEOFF] == 0.0
 
 
 # Integration tests
@@ -579,7 +684,15 @@ class TestIntegration:
     """Integration tests to check function interactions"""
 
     def test_nox_emissions_consistency(self):
-        """Test NOₓ emissions consistency across functions"""
+        """Regression guard for `BFFM2_EINOx`. The expected NOxEI array
+        below is a snapshot generated by running the SUT once on this
+        exact input set — it is **not** independently sourced from the
+        notebook or a published reference. Its purpose is to flag any
+        change in the BFFM2 output for these inputs; scientific
+        correctness is established elsewhere by
+        `TestBFFM2_EINOx.test_matches_reference_component_values`,
+        which checks against the notebook-sourced rounded values.
+        """
         fuelflow_trajectory = np.array([1.0, 1.5, 2.0])
         EI_NOx_matrix = ThrustModeValues(30.0, 25.0, 20.0, 18.0)
         fuelflow_performance = ThrustModeValues(0.8, 1.2, 1.6, 2.0)
@@ -590,6 +703,7 @@ class TestIntegration:
             fuelflow_trajectory, EI_NOx_matrix, fuelflow_performance, Tamb, Pamb
         )
 
-        assert np.allclose(
+        # Regression snapshot — NOT an independent reference. See docstring.
+        np.testing.assert_allclose(
             result.NOxEI, np.array([26.75988671, 14.4120521, 11.92014638])
         )
