@@ -235,7 +235,7 @@ def test_adjustment_altitude_clamps(
         ),
         pytest.param(
             {'descent_distance': -1.0},
-            'Arrival airport should not be above cruise altitude',
+            'Descent distance must be non-negative',
             id='negative_descent_distance_raises',
         ),
     ],

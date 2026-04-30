@@ -175,7 +175,7 @@ class AdjustableLegacyContext(Context):
 
         if self.crz_start_altitude < self.clm_start_altitude:
             raise ValueError(
-                "Departure airport + 3000ft should not be higher"
+                "Departure airport + 3000ft should not be higher "
                 "than start of cruise point"
             )
         if self.des_end_altitude > self.des_start_altitude:
@@ -191,7 +191,7 @@ class AdjustableLegacyContext(Context):
                 descent_distance, mission, ac_performance
             )
         if self.descent_dist_approx < 0:
-            raise ValueError('Arrival airport should not be above cruise altitude')
+            raise ValueError('Descent distance must be non-negative')
 
         # Initialize weather regridding when requested.
         self.weather: Weather | None = None
@@ -241,7 +241,7 @@ class AdjustableLegacyBuilder(Builder):
 
     Args:
         options (Options): Base options for trajectory building.
-        legacy_options (LegactyOptions): Builder-specific options for legacy
+        legacy_options (LegacyOptions): Builder-specific options for legacy
             trajectory builder.
     """
 
