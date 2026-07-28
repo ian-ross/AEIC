@@ -349,9 +349,11 @@ def test_lto_respects_traj_flag_false(perf_model, fuel, trajectory):
         assert any(
             output.lto_emissions[species][m] > 0 for species in output.lto_emissions
         )
-    climb_slice = slice(0, trajectory.n_climb)
-    cruise_slice = slice(trajectory.n_climb, len(trajectory) - trajectory.n_descent)
-    descent_slice = slice(len(trajectory) - trajectory.n_descent, len(trajectory))
+    cruise_start = trajectory.n_climb - 1
+    cruise_stop = cruise_start + trajectory.n_cruise
+    climb_slice = slice(0, cruise_start)
+    cruise_slice = slice(cruise_start, cruise_stop)
+    descent_slice = slice(cruise_stop, len(trajectory))
     for species, arr in output.trajectory_emissions.items():
         assert np.sum(arr[cruise_slice]) > 0
         assert np.allclose(arr[climb_slice], 0)
