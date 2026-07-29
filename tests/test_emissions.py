@@ -326,6 +326,47 @@ def test_apu_disabled_short_circuits(perf_model, fuel, trajectory):
     assert dict(output.apu_emissions) == {}
 
 
+@pytest.mark.config_updates(
+    emissions__co2_enabled=False,
+    emissions__h2o_enabled=False,
+    emissions__sox_enabled=False,
+    emissions__nox_method='none',
+    emissions__hc_method='none',
+    emissions__co_method='none',
+    emissions__nvpm_method='none',
+    emissions__lifecycle_enabled=False,
+)
+def test_apu_and_gse_exclude_disabled_species(perf_model, fuel, trajectory):
+    emissions = compute_emissions(perf_model, fuel, trajectory)
+
+    assert set(emissions.apu_indices) == set()
+    assert set(emissions.apu_emissions) == set()
+    assert set(emissions.gse_emissions) == set()
+
+
+@pytest.mark.config_updates(emissions__lifecycle_enabled=True)
+def test_lifecycle_co2_replaces_operational_co2_for_all_fuel(
+    perf_model, fuel, trajectory
+):
+    emissions = compute_emissions(perf_model, fuel, trajectory)
+    operational_co2 = (
+        np.sum(emissions.trajectory_emissions[Species.CO2])
+        + emissions.lto_emissions[Species.CO2].sum()
+        + emissions.apu_emissions[Species.CO2]
+        + emissions.gse_emissions[Species.CO2]
+    )
+    expected_lifecycle_total = (
+        fuel.lifecycle_CO2 * fuel.energy_MJ_per_kg * emissions.total_fuel_burn
+    )
+
+    assert emissions.total_emissions[Species.CO2] == pytest.approx(
+        expected_lifecycle_total
+    )
+    assert emissions.lifecycle_co2 == pytest.approx(
+        expected_lifecycle_total - operational_co2
+    )
+
+
 def test_scope11_profile_caching(perf_model):
     profile_first = scope11_profile(perf_model.edb)
     profile_second = scope11_profile(perf_model.edb)
@@ -519,10 +560,10 @@ def test_get_gse_emissions_matches_reference_profile(fuel):
     kg_to_g = 1000.0
     eps = 0.02
     mw_o2, mw_so2, mw_so4 = 32.0, 64.0, 96.0
-    so4 = fsc * kg_to_g * eps * (mw_so4 / mw_o2)
-    so2 = fsc * kg_to_g * (1.0 - eps) * (mw_so2 / mw_o2)
-
     gse_fuel = co2_wide / fuel.EI_CO2
+    so4 = fsc * kg_to_g * eps * (mw_so4 / mw_o2) * gse_fuel
+    so2 = fsc * kg_to_g * (1.0 - eps) * (mw_so2 / mw_o2) * gse_fuel
+
     expected = SpeciesValues[float](
         {
             Species.CO2: co2_wide,
@@ -544,3 +585,23 @@ def test_get_gse_emissions_matches_reference_profile(fuel):
         assert result[species] == pytest.approx(value)
     if Species.nvPM_N in result:
         assert result[Species.nvPM_N] == pytest.approx(0.0)
+
+
+@pytest.mark.parametrize(
+    ('aircraft_class', 'matlab_pm10'),
+    [
+        (AircraftClass.WIDE, 55.0),
+        (AircraftClass.NARROW, 25.0),
+        (AircraftClass.SMALL, 20.0),
+        (AircraftClass.FREIGHT, 55.0),
+    ],
+)
+def test_gse_nvpm_matches_matlab_pm_remainder(aircraft_class, matlab_pm10, fuel):
+    gse = get_GSE_emissions(aircraft_class, fuel)
+    matlab_so4_ei = 5.0e-6 * 1000.0 * 0.02 * (96.0 / 32.0)
+    expected_so4 = matlab_so4_ei * gse.fuel_burn
+
+    assert gse.emissions[Species.SO4] == pytest.approx(expected_so4)
+    assert gse.emissions[Species.nvPM] + gse.emissions[Species.SO4] == pytest.approx(
+        matlab_pm10
+    )
