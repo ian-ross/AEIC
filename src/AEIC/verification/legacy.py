@@ -76,15 +76,19 @@ class LegacyTrajectory:
         retval.longitude = self.df.long.values
         retval.altitude = self.df.alt.values * FEET_TO_METERS
         retval.ground_distance = self.df.horDist.values * NAUTICAL_MILES_TO_METERS
-        # Correct weird jumps in MATLAB azimuth output.
+        # Correct the near-180-degree direction reversals that MATLAB emits
+        # after an altitude-change step overshoots the destination airport.
         tmp_azimuth = self.df.az.values.copy()
         for i in range(1, len(tmp_azimuth)):
-            if tmp_azimuth[i] - tmp_azimuth[i - 1] > 180:
+            difference = tmp_azimuth[i] - tmp_azimuth[i - 1]
+            if 90 < difference < 270:
                 tmp_azimuth[i:] -= 180
-            elif tmp_azimuth[i - 1] - tmp_azimuth[i] > 180:
+            elif -270 < difference < -90:
                 tmp_azimuth[i:] += 180
         retval.azimuth = tmp_azimuth
         retval.true_airspeed = self.df.TAS.values
+        retval.ground_speed = self.df.groundSpeed.values
+        retval.heading = self.df.heading.values
         retval.rate_of_climb = self.df.roc_fpm.values * FPM_TO_MPS
         retval.aircraft_mass = self.df.acMass.values
         retval.fuel_flow = self.df.fuelFlow.values / MINUTES_TO_SECONDS

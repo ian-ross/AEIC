@@ -300,7 +300,11 @@ class LegacyBuilder(Builder):
             if flight_phase == FlightPhase.CLIMB
             else -self.altitude_step,
         )
-        if (flight_phase == FlightPhase.CLIMB and altitudes[-1] < final_altitude) or (
+        # Snap floating-point step accumulation to the exact endpoint
+        # to avoid a near-zero extra segment.
+        if np.isclose(altitudes[-1], final_altitude, rtol=0.0, atol=1e-9):
+            altitudes[-1] = final_altitude
+        elif (flight_phase == FlightPhase.CLIMB and altitudes[-1] < final_altitude) or (
             flight_phase == FlightPhase.DESCENT and altitudes[-1] > final_altitude
         ):
             altitudes = np.append(altitudes, final_altitude)
@@ -331,7 +335,7 @@ class LegacyBuilder(Builder):
             else:
                 track_vector = self.weather.get_track_vector(
                     time=self.mission.departure,
-                    gt_point=self.ground_track.location(pt.ground_distance),
+                    gt_point=self.ground_track.step(pt.ground_distance, 0.0),
                     altitude=start_altitude,
                     horizontal_airspeed=horizontal_airspeed,
                     track_azimuth=pt.azimuth,
