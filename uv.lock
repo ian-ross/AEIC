@@ -31,6 +31,7 @@ dependencies = [
     { name = "timezonefinder" },
     { name = "tomlkit" },
     { name = "tqdm" },
+    { name = "tzdata" },
     { name = "xarray" },
     { name = "zarr" },
 ]
@@ -69,6 +70,7 @@ requires-dist = [
     { name = "timezonefinder", specifier = ">=8.0.0" },
     { name = "tomlkit", specifier = ">=0.13" },
     { name = "tqdm", specifier = ">=4.67.1" },
+    { name = "tzdata", specifier = ">=2025.3" },
     { name = "xarray", specifier = ">=2025.12.0" },
     { name = "zarr", specifier = ">=3.1.6" },
 ]
