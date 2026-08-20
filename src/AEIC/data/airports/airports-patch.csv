@@ -34,3 +34,47 @@ id,ident,type,name,latitude_deg,longitude_deg,elevation_ft,continent,iso_country
 9990108,MMTX,closed,Tenosique Airport,17.481667,-91.416667,98,NA,MX,,"Tenosique, Tabasco",no,MMTX,TJX,,,,
 9990109,PAWB,small_airport,Deep Bay Airport,55.32,-132.56,0,NA,US,,"Deep Bay, Alaska",no,PAWB,WDB,,,,
 9990110,,closed,WTX Airstrip (defunct),33.0,-102.5,3400,NA,US,,,no,,WTX,,,,
+9990201,EDWB,closed,Bremerhaven Airport,53.506943,8.572778,10,EU,DE,DE-HB,Bremerhaven,no,EDWB,BRV,,,https://en.wikipedia.org/wiki/Bremerhaven_Airport,closed 2016
+9990202,KCSL,heliport,O'Sullivan Army Heliport,35.333308,-120.73434,250,NA,US,US-CA,Camp San Luis Obispo,no,KCSL,CSL,CSL,,,
+9990203,MMSL,medium_airport,Cabo San Lucas International Airport,22.947701,-109.936996,459,NA,MX,MX-BCS,Cabo San Lucas,yes,MMSL,CSW,CSL,https://www.acsl.com.mx/en/,https://en.wikipedia.org/wiki/Cabo_San_Lucas_International_Airport,
+9990204,ZWLK,medium_airport,Barkol Dahe Airport,43.598,93.017,,AS,CN,CN-65,Barkol,yes,ZWLK,DHH,,,,opened 2025
+9990205,UKCC,closed,Donetsk Sergei Prokofiev International Airport,48.073611,37.739722,781,EU,UA,UA-14,Donetsk,no,UKCC,DOK,,,https://en.wikipedia.org/wiki/Donetsk_International_Airport,destroyed/closed 2014
+9990206,KEDC,small_airport,Austin Executive Airport,30.397493,-97.566393,620,NA,US,US-TX,Austin,no,KEDC,EDC,EDC,https://www.austinexecutiveairport.com/,https://en.wikipedia.org/wiki/Austin_Executive_Airport,EDC is FAA identifier; some databases treat it as IATA
+9990207,,small_airport,Guamúchil Evora Airport,25.406723,-108.072245,236,NA,MX,MX-SIN,Guamúchil,no,,EVO,EVO,,,EVO is also used as local identifier
+9990208,OYHD,closed,Hodeidah International Airport,14.753,42.9763,41,AS,YE,YE-HU,Al Hudaydah,no,OYHD,HOD,,,https://en.wikipedia.org/wiki/Hodeidah_International_Airport,scheduled service suspended 2015
+9990209,EGXU,closed,RAF Linton-on-Ouse,54.0489,-1.25275,53,EU,GB,GB-ENG,Linton-on-Ouse,no,EGXU,HRT,,,,IATA HRT; RAF station closed 2020
+9990210,,heliport,Croisette Heliport,43.725666,7.419161,3,EU,FR,FR-PAC,Cannes,no,,JCA,,,,
+9990211,,heliport,Geoje Heliport,35.17322,128.946459,24,AS,KR,KR-48,Geoje,no,,JGE,,,,
+9990212,KJQF,medium_airport,Concord-Padgett Regional Airport,35.38777,-80.709133,704,NA,US,US-NC,Concord,yes,KJQF,JQF,JQF,https://www.concordairportnc.com/,https://en.wikipedia.org/wiki/Concord-Padgett_Regional_Airport,JQF is also FAA/location identifier
+9990213,MULM,small_airport,La Coloma Airport,22.3378,-83.64299,135,NA,CU,CU-01,Pinar del Río,no,MULM,LCL,,,,
+9990214,GQNA,small_airport,Aleg Airport,17.0485,-13.9095,120,AF,MR,MR-03,Aleg,no,GQNA,LEG,,,,
+9990215,SEMH,closed,General Manuel Serrano Airport,-3.2689,-79.9617,10,SA,EC,EC-O,Machala,no,SEMH,MCH,,,https://en.wikipedia.org/wiki/General_Manuel_Serrano_Airport,former commercial airport
+9990216,UMMM,closed,Minsk-1 Airport,53.864472,27.539683,748,EU,BY,BY-HM,Minsk,no,UMMM,MHP,,,https://en.wikipedia.org/wiki/Minsk-1_Airport,closed 2015
+9990217,EGMH,closed,Manston Airport,51.342222,1.346111,178,EU,GB,GB-ENG,Manston,no,EGMH,MSE,,,https://en.wikipedia.org/wiki/Manston_Airport,closed to commercial operations 2014
+9990218,VVNT,closed,Nha Trang Air Base,12.227467,109.192322,20,AS,VN,VN-34,Nha Trang,no,VVNT,NHA,,,,former Nha Trang Airport
+9990219,ENNK,closed,"Narvik Airport, Framnes",68.436,17.3867,95,EU,NO,NO-18,Narvik,no,ENNK,NVK,,,"https://en.wikipedia.org/wiki/Narvik_Airport,_Framnes",closed 2017
+9990220,UUMO,medium_airport,Ostafyevo International Business Airport,55.5041,37.5095,564,EU,RU,RU-MOW,Moscow,no,UUMO,OSF,,https://ostafyevo.gazprom.com/,https://en.wikipedia.org/wiki/Ostafyevo_International_Business_Airport,
+9990221,EGOU,small_airport,Out Skerries Airport,60.4251,-0.74872,75,EU,GB,GB-SCT,Out Skerries,no,EGOU,OUK,,,,
+9990222,MPLP,small_airport,Captain Ramon Xatruch Airport,8.4067,-78.1417,30,NA,PA,PA-5,La Palma,no,MPLP,PLP,,,https://en.wikipedia.org/wiki/Captain_Ramon_Xatruch_Airport,
+9990223,VEPU,medium_airport,Purnea Airport,25.7596,87.41,129,AS,IN,IN-BR,Purnea,yes,VEPU,PXN,,,,commercial service began 2025
+9990224,LIAP,small_airport,L'Aquila-Preturo Airport,42.379902,13.3092,2211,EU,IT,IT-65,L'Aquila,no,LIAP,QAQ,AQ03,,https://en.wikipedia.org/wiki/L%27Aquila%E2%80%93Preturo_Airport,
+9990225,,heliport,Itilleq Heliport,66.5758,-53.4767,66,NA,GL,GL-QE,Itilleq,yes,,QJG,,,,
+9990226,SNQX,small_airport,Quixadá Regional Airport,-4.979,-39.056,738,SA,BR,BR-CE,Quixadá,no,SNQX,QXD,CE0010,https://www4.infraero.gov.br/aeroporto-quixada/,https://en.wikipedia.org/wiki/Quixad%C3%A1_Airport,
+9990227,URRR,closed,Rostov-on-Don Airport,47.258208,39.818089,259,EU,RU,RU-ROS,Rostov-on-Don,no,URRR,RVI,,,https://en.wikipedia.org/wiki/Rostov-on-Don_Airport,historic IATA RVI; also ROV; closed 2018
+9990228,ENRY,medium_airport,"Moss Airport, Rygge",59.378817,10.785439,174,EU,NO,NO-31,Moss / Rygge,no,ENRY,RYG,,http://www.en.ryg.no/,"https://en.wikipedia.org/wiki/Moss_Airport,_Rygge",civil traffic ended 2016
+9990229,RPMN,medium_airport,Sanga-Sanga Airport,5.04867,119.74355,28,AS,PH,PH-TAW,Bongao,yes,RPMN,SGS,,,,historic/alternate IATA SGS; current IATA commonly TWT
+9990230,ZBSH,closed,Qinhuangdao Shanhaiguan Airport,39.96978,119.73111,30,AS,CN,CN-13,Qinhuangdao,no,ZBSH,SHP,,,https://en.wikipedia.org/wiki/Qinhuangdao_Shanhaiguan_Airport,civil flights moved to Beidaihe Airport
+9990231,ENSN,medium_airport,"Skien Airport, Geiteryggen",59.185,9.56694,463,EU,NO,NO-40,Skien,no,ENSN,SKE,,,"https://en.wikipedia.org/wiki/Skien_Airport,_Geiteryggen",scheduled service ended
+9990232,SPMR,small_airport,Santa María Airport,-12.4,-76.7681,769,SA,PE,PE-LIM,Santa María del Mar,no,SPMR,SMG,,,,
+9990233,EDOP,medium_airport,Schwerin-Parchim Airport,53.426944,11.783333,166,EU,DE,DE-MV,Parchim,no,EDOP,SZW,,,,
+9990234,EGHT,heliport,Tresco Heliport,49.94574,-6.33166,20,EU,GB,GB-ENG,Tresco,yes,EGHT,TSO,,https://www.tresco.co.uk/arriving/tresco-heliport,https://en.wikipedia.org/wiki/Tresco_Heliport,
+9990235,ENFG,closed,"Fagernes Airport, Leirin",61.015556,9.288056,2697,EU,NO,NO-34,Fagernes,no,ENFG,VDB,,,"https://en.wikipedia.org/wiki/Fagernes_Airport,_Leirin",closed 2018
+9990236,UKCW,closed,Luhansk International Airport,48.4174,39.3741,636,EU,UA,UA-09,Luhansk,no,UKCW,VSG,,,https://en.wikipedia.org/wiki/Luhansk_International_Airport,closed/destroyed 2014
+9990237,LFAV,small_airport,Valenciennes-Denain Airport,50.3258,3.46126,177,EU,FR,FR-HDF,Valenciennes,no,LFAV,XVS,,,,
+9990238,OERY,closed,King Salman Air Base (former Riyadh International Airport),24.724978,46.714009,2037,AS,SA,SA-01,Riyadh,no,OERY,XXN,,,https://en.wikipedia.org/wiki/King_Salman_Air_Base_(closed_2021),former Riyadh International Airport
+9990239,ZJYX,medium_airport,Sansha Yongxing Airport,16.833,112.344,16,AS,CN,CN-46,Sansha,yes,ZJYX,XYI,,,,Woody/Yongxing Island
+9990240,,small_airport,Broadview Airport,50.375,-102.584,1960,NA,CA,CA-SK,Broadview,no,,YDR,,,,historic IATA/location code
+9990241,,seaplane_base,Desolation Sound Seaplane Base,50.123,-124.684,0,NA,CA,CA-BC,Desolation Sound,no,,YDS,,,,
+9990242,CYKZ,closed,Buttonville Municipal Airport,43.862221,-79.370001,650,NA,CA,CA-ON,Markham / Toronto,no,CYKZ,YKZ,,,https://en.wikipedia.org/wiki/Buttonville_Municipal_Airport,closed 2023
+9990243,FMCN,small_airport,Iconi Airport,-11.7108,43.2439,33,AF,KM,KM-G,Moroni,no,FMCN,YVA,,,,
+9990244,ZLLL,large_airport,Lanzhou Zhongchuan International Airport,36.5152,103.62,6388,AS,CN,CN-62,Lanzhou,yes,ZLLL,ZGC,,,https://en.wikipedia.org/wiki/Lanzhou_Zhongchuan_International_Airport,historic IATA ZGC; current IATA LHW

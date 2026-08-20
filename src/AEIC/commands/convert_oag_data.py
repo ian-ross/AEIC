@@ -4,6 +4,7 @@ import os
 import click
 
 import AEIC.missions.oag as oag
+from AEIC.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -42,10 +43,9 @@ logger = logging.getLogger(__name__)
     help='Output SQLite database file.',
 )
 def convert_oag_data(warnings_file, year, in_file, db_file):
-    if os.environ.get('AEIC_PATH') is None:
-        raise RuntimeError('AEIC_PATH environment variable is not set.')
     if os.path.exists(db_file):
         raise RuntimeError(f'Database file {db_file} already exists.')
 
+    Config.load()
     logging.basicConfig(level=logging.INFO)
     oag.convert_oag_data(in_file, year, db_file, warnings_file)
