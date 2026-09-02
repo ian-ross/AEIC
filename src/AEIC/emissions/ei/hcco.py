@@ -40,9 +40,48 @@ def EI_HCCO(
         The HC+CO emission index [g x / kg fuel] at each ff_eval.
     """
 
-    if any(x_EI.as_array() == 0.0) or any(ff_cal.as_array() == 0.0):
-        logger.warning(f'Calibration xEI and fuel flows must be positive. ({label})')
-        return np.zeros(len(ff_eval), dtype=float)
+    # Validate inputs and match MATLAB's handling of zero calibration EIs.
+    ff_eval = np.asarray(ff_eval, dtype=float)
+    if ff_eval.ndim != 1:
+        raise ValueError(f'Evaluation fuel flow must be one-dimensional. ({label})')
+    if not np.all(np.isfinite(ff_eval)):
+        raise ValueError(f'Evaluation fuel flow must be finite. ({label})')
+    if np.any(ff_eval < 0.0):
+        raise ValueError(f'Evaluation fuel flow must be non-negative. ({label})')
+
+    x_EI_values = np.asarray(x_EI.as_array(), dtype=float)
+    zero_EI = x_EI_values == 0.0
+    if np.any(zero_EI):
+        logger.warning(f'Replacing zero calibration xEI with 0.1 g/kg. ({label})')
+        x_EI_values[zero_EI] = 0.1
+    if not np.all(np.isfinite(x_EI_values)) or np.any(x_EI_values <= 0.0):
+        raise ValueError(
+            f'Calibration emission indices must be finite and positive. ({label})'
+        )
+    x_EI = ThrustModeValues(x_EI_values)
+
+    ff_cal_values = np.asarray(ff_cal.as_array(), dtype=float)
+    if not np.all(np.isfinite(ff_cal_values)) or np.any(ff_cal_values <= 0.0):
+        raise ValueError(
+            f'Calibration fuel flows must be finite and positive. ({label})'
+        )
+    if np.any(np.diff(ff_cal_values) <= 0.0):
+        raise ValueError(
+            f'Calibration fuel flows must be strictly increasing. ({label})'
+        )
+
+    try:
+        Tamb = np.broadcast_to(np.asarray(Tamb, dtype=float), ff_eval.shape)
+        Pamb = np.broadcast_to(np.asarray(Pamb, dtype=float), ff_eval.shape)
+    except ValueError as exc:
+        raise ValueError(
+            'Ambient temperature and pressure must be broadcastable to fuel flow.'
+            f' ({label})'
+        ) from exc
+    if not np.all(np.isfinite(Tamb)) or np.any(Tamb <= 0.0):
+        raise ValueError(f'Ambient temperature must be finite and positive. ({label})')
+    if not np.all(np.isfinite(Pamb)) or np.any(Pamb <= 0.0):
+        raise ValueError(f'Ambient pressure must be finite and positive. ({label})')
 
     # ----------------------------------------------------------------------------
     # 1. Compute slanted‐line parameters in log10 space
@@ -164,5 +203,10 @@ def EI_HCCO(
     delta_amb = Pamb / 101325.0
     factor = (theta_amb**3.3) / (delta_amb**1.02)
     xEI_out *= factor
+
+    if not np.all(np.isfinite(xEI_out)) or np.any(xEI_out < 0.0):
+        raise ValueError(
+            f'Calculated emission indices must be finite and non-negative. ({label})'
+        )
 
     return xEI_out

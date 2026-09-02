@@ -106,16 +106,6 @@ class TestEI_HCCO:
         )
         assert np.all(np.isfinite(result))
 
-    def test_zero_and_negative_fuel_flows(self):
-        """Test how zero and negative fuel flows are handled"""
-        test_flow = np.array([0.0, -0.01, 0.1, 1.0, 0.001, 10.1])
-        result = EI_HCCO(
-            test_flow, self.x_EI_matrix, self.fuelflow_calibrate, self.Tamb, self.Pamb
-        )
-        assert result.shape == test_flow.shape
-        assert np.all(np.isfinite(result))
-        assert np.all(result >= 0.0)
-
     def test_zero_fuel_flow_matches_matlab_zero_output(self):
         """MATLAB leaves zero-flow points at the initialized zero EI."""
         # This calibration puts log10(0)'s Python placeholder above the
@@ -133,24 +123,49 @@ class TestEI_HCCO:
 
         np.testing.assert_array_equal(result, np.array([0.0]))
 
-    def test_duplicate_calibration_flows_flatten_slanted_segment(self):
-        """Duplicate calibration flows make the fitted EI invariant to flow."""
-        fuelflow_eval = np.array([0.15, 0.25, 0.3, 0.5])
-        x_EI_matrix = ThrustModeValues(10.0, 8.0, 5.0, 3.0)
-        fuelflow_calibrate = ThrustModeValues(0.3, 0.3, 0.7, 1.4)
+    def test_zero_calibration_ei_matches_matlab_substitution(self):
+        """MR: a zero calibration EI behaves exactly like an explicit 0.1 g/kg."""
+        fuel_flow = np.array([0.1, 0.4, 1.0])
+        zero_idle = ThrustModeValues(0.0, 0.05, 0.02, 0.03)
+        matlab_substitution = ThrustModeValues(0.1, 0.05, 0.02, 0.03)
 
-        result = EI_HCCO(
-            fuelflow_eval,
-            x_EI_matrix,
-            fuelflow_calibrate,
+        actual = EI_HCCO(
+            fuel_flow,
+            zero_idle,
+            self.fuelflow_calibrate,
             288.15,
             101325.0,
         )
-        expected = np.sqrt(
-            x_EI_matrix[ThrustMode.CLIMB] * x_EI_matrix[ThrustMode.TAKEOFF]
+        expected = EI_HCCO(
+            fuel_flow,
+            matlab_substitution,
+            self.fuelflow_calibrate,
+            288.15,
+            101325.0,
         )
 
-        np.testing.assert_allclose(result, expected)
+        np.testing.assert_allclose(actual, expected)
+        assert np.all(actual > 0.0)
+
+    def test_invalid_inputs_raise(self):
+        valid = {
+            'ff_eval': np.array([0.1]),
+            'x_EI': self.x_EI_matrix,
+            'ff_cal': self.fuelflow_calibrate,
+            'Tamb': 288.15,
+            'Pamb': 101325.0,
+        }
+        invalid_cases = [
+            ({'ff_eval': np.array([-0.01])}, 'non-negative'),
+            ({'x_EI': ThrustModeValues(np.nan, 0.05, 0.02, 0.03)}, 'emission indices'),
+            ({'ff_cal': ThrustModeValues(0.0, 0.8, 1.2, 1.8)}, 'fuel flows'),
+            ({'ff_cal': ThrustModeValues(0.4, 0.4, 1.2, 1.8)}, 'strictly increasing'),
+            ({'Tamb': 0.0}, 'temperature'),
+        ]
+
+        for override, message in invalid_cases:
+            with pytest.raises(ValueError, match=message):
+                EI_HCCO(**(valid | override))
 
     def test_intercept_adjustment_uses_second_mode_value(self):
         """When intercept drifts low, the second mode should set the ceiling"""
