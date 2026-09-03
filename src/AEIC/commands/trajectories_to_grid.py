@@ -15,6 +15,7 @@ from AEIC.gridding.grid import Grid, ISAPressureGrid
 from AEIC.gridding.kernels import process_segments_nonuniform_z
 from AEIC.gridding.output import OutputGrid
 from AEIC.missions import CountQuery, Database, Filter, Query, TimeRangeQuery
+from AEIC.performance.types import ThrustMode
 from AEIC.storage.reproducibility import ReproducibilityData
 from AEIC.trajectories import Trajectory, TrajectoryStore
 from AEIC.types import Species
@@ -38,7 +39,10 @@ def map_phase(
     # Build output array. This assumes that all trajectories have the same set
     # of species, which should be the case if they are all processed with the
     # same configuration.
-    output = np.zeros(grid.shape + (len(species),))
+    traj_output = np.zeros(grid.shape + (len(species),))
+
+    # Build output arrays for surface emissions: LTO only for now.
+    lto_output = np.zeros(grid.shape[0:2] + (len(species),))
 
     # Accumulate segments in batches: arrays for segment endpoints and
     # emissions are reused across batches. Emissions are recorded at the first
@@ -77,7 +81,7 @@ def map_phase(
                     lon1[:nsegs],
                     z1[:nsegs],
                     emissions[:nsegs, :],
-                    output,
+                    traj_output,
                     z_edges,
                     lat_min,
                     grid.latitude.resolution,
@@ -105,6 +109,10 @@ def map_phase(
                 emissions[start:end, i] = sub_traj.trajectory_emissions[sp][:-1]
             nsegs += len(sub_traj) - 1
 
+        # Add the LTO emissions from this trajectory to the surface output
+        # array.
+        _add_surface_emissions(lto_output, traj, grid, species)
+
         p.update()
     p.close()
 
@@ -118,7 +126,7 @@ def map_phase(
             lon1[:nsegs],
             z1[:nsegs],
             emissions[:nsegs, :],
-            output,
+            traj_output,
             z_edges,
             lat_min,
             grid.latitude.resolution,
@@ -126,17 +134,56 @@ def map_phase(
             grid.longitude.resolution,
         )
 
-    # Save output array to zarr file all in one go: more efficient than
-    # incrementally updating the zarr file for each batch.
-    save = zarr.create_array(store=map_output, dtype='f4', shape=output.shape)
-    save[:] = output
+    # Save trajectory output array to zarr file all in one go: more efficient
+    # than incrementally updating the zarr file for each batch.
+    traj_save = zarr.create_array(
+        store=f'{map_output}.zarr', dtype='f4', shape=traj_output.shape
+    )
+    traj_save[:] = traj_output
 
-    # Attach grid and filter metadata to the zarr array for cross-slice
-    # validation during the reduce phase.
-    save.attrs['grid_json'] = grid.model_dump_json()
-    save.attrs['filter_json'] = (
+    # Save surface data.
+    lto_save = zarr.create_array(
+        store=f'{map_output}-lto.zarr', dtype='f4', shape=lto_output.shape
+    )
+    lto_save[:] = lto_output
+
+    # Attach grid and filter metadata to the trajectory zarr array for
+    # cross-slice validation during the reduce phase.
+    traj_save.attrs['grid_json'] = grid.model_dump_json()
+    traj_save.attrs['filter_json'] = (
         filter_expr.model_dump_json() if filter_expr is not None else None
     )
+
+
+def _add_surface_emissions(
+    lto_output: np.ndarray, traj: Trajectory, grid: Grid, species: list[Species]
+) -> None:
+    # Add the LTO emissions from this trajectory to the surface output array.
+    # This is done here rather than in the segment processing loop because LTO
+    # emissions are not associated with a specific segment and are instead
+    # recorded at the trajectory level. The different LTO thrust mode emissions
+    # are split between the origin and destination as follows: takeoff and
+    # climb emissions are assigned to the origin, approach emissions are
+    # assigned to the destination, and idle emissions are split 50/50 between
+    # the origin and destination.
+    for i, sp in enumerate(species):
+        lto_output[
+            grid.latitude.index(traj.latitude[0]),
+            grid.longitude.index(traj.longitude[0]),
+            i,
+        ] += (
+            traj.lto_emissions[sp][ThrustMode.TAKEOFF]
+            + traj.lto_emissions[sp][ThrustMode.CLIMB]
+            + 0.5 * traj.lto_emissions[sp][ThrustMode.IDLE]
+        )
+        lto_output[
+            grid.latitude.index(traj.latitude[-1]),
+            grid.longitude.index(traj.longitude[-1]),
+            i,
+        ] += (
+            traj.lto_emissions[sp][ThrustMode.APPROACH]
+            + 0.5 * traj.lto_emissions[sp][ThrustMode.IDLE]
+        )
 
 
 def _discover_slice_files(map_prefix: str) -> tuple[dict[int, Path], list[int]]:
@@ -449,7 +496,7 @@ def trajectories_to_grid(
                     store, mission_db_file, filter_expr, limit, offset
                 )
                 logger.info('Flights to process in slice: %s', limit)
-                map_output = f'{map_prefix}-{slice_index:05d}.zarr'
+                map_output = f'{map_prefix}-{slice_index:05d}'
                 t0 = time.perf_counter()
                 map_phase(limit, species, traj_iter, grid, map_output, filter_expr)
                 logger.info('map_phase elapsed: %.3f s', time.perf_counter() - t0)
