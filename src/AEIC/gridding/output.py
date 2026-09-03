@@ -169,7 +169,7 @@ class OutputGrid:
                 )
                 var.units = 'g'
                 var.description = f'Gridded {sp.name} LTO emissions'
-                var[0, :, :] = self.lto_accum[..., i].T
+                var[0, :, :] = self.lto_accum[..., i]
 
             # Minimal global attributes for quick identification.
             ds.aeic_version = VERSION
